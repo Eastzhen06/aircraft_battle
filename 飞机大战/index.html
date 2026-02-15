@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>飞机大战</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Debug/Login Button -->
+        <div id="login-btn" style="position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; background: rgba(255, 255, 255, 0.1); border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.3); cursor: pointer; z-index: 200; display: flex; justify-content: center; align-items: center; color: #fff; font-size: 20px;">👤</div>
+
+        <!-- Login Modal -->
+        <div id="login-modal" class="screen hidden" style="background: rgba(0, 0, 0, 0.9);">
+            <div class="menu-container" style="background: rgba(20, 20, 40, 0.9); padding: 30px; border-radius: 15px; border: 1px solid #00d4ff; box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);">
+                <h2 style="color: #00d4ff; text-align: center; margin-bottom: 20px;">开发者登录</h2>
+                <div style="margin-bottom: 15px;">
+                    <label style="color: #fff; display: block; margin-bottom: 5px;">账号</label>
+                    <input type="text" id="login-account" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.5); border: 1px solid #555; color: #fff; border-radius: 5px;">
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="color: #fff; display: block; margin-bottom: 5px;">密码</label>
+                    <input type="password" id="login-password" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.5); border: 1px solid #555; color: #fff; border-radius: 5px;">
+                </div>
+                <button id="login-submit-btn" class="menu-btn" style="width: 100%;">登录</button>
+                <button id="login-close-btn" class="menu-btn secondary" style="width: 100%; margin-top: 10px;">关闭</button>
+                <div id="login-msg" style="color: #ff4444; text-align: center; margin-top: 10px; min-height: 20px;"></div>
+            </div>
+        </div>
+
+        <div id="start-screen" class="screen">
+            <div class="title-container">
+                <h1 class="game-title">飞机大战</h1>
+                <p class="subtitle">SPACE WAR</p>
+            </div>
+            <div class="menu-container">
+                <button id="start-btn" class="menu-btn">经典模式</button>
+                <button id="campaign-btn" class="menu-btn secondary">闯关模式</button>
+                <button id="endless-btn" class="menu-btn secondary">无尽模式</button>
+                <button id="legion-btn" class="menu-btn secondary">荣誉军团</button>
+                <button id="coop-btn" class="menu-btn secondary">双人合作</button>
+                <button id="hangar-btn" class="menu-btn secondary">机库</button>
+                <button id="shop-btn" class="menu-btn secondary">商店</button>
+            </div>
+            <div class="currency-display">
+                <span class="currency gold"><span id="gold-display">0</span> 金币</span>
+                <span class="currency diamond"><span id="diamond-display">0</span> 钻石</span>
+            </div>
+            <div class="high-score-display">
+                <p>最高分：<span id="high-score">0</span></p>
+            </div>
+            <div class="controls-info">
+                <p>操作说明：</p>
+                <p>P1: WASD - 移动 | 空格键 - 射击 | E - 技能 | P - 暂停</p>
+                <p>P2: 方向键 - 移动 | Enter - 射击</p>
+            </div>
+        </div>
+        
+        <div id="mode-select-screen" class="screen hidden">
+            <div class="mode-content">
+                <h2 id="mode-title">选择模式</h2>
+                <div id="mode-options" class="mode-options"></div>
+                <button id="back-to-menu-btn" class="menu-btn secondary">返回</button>
+            </div>
+        </div>
+        
+        <div id="aircraft-select-screen" class="screen hidden">
+            <div class="aircraft-content">
+                <h2>选择战机</h2>
+                <div id="aircraft-grid" class="aircraft-grid"></div>
+                <div class="aircraft-info" id="aircraft-info">
+                    <h3 id="aircraft-name">战斗机</h3>
+                    <p id="aircraft-desc">平衡型战机</p>
+                    <div class="aircraft-stats">
+                        <div class="stat-row"><span>速度</span><div class="stat-bar" id="stat-speed"></div></div>
+                        <div class="stat-row"><span>火力</span><div class="stat-bar" id="stat-firepower"></div></div>
+                        <div class="stat-row"><span>防御</span><div class="stat-bar" id="stat-defense"></div></div>
+                    </div>
+                    <div class="aircraft-level">等级: <span id="aircraft-level">1</span></div>
+                </div>
+                <div class="aircraft-buttons">
+                    <button id="select-aircraft-btn" class="menu-btn">选择</button>
+                    <button id="upgrade-aircraft-btn" class="menu-btn secondary">升级</button>
+                    <button id="back-from-aircraft-btn" class="menu-btn secondary">返回</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="campaign-screen" class="screen hidden">
+            <div class="campaign-content">
+                <h2>闯关模式</h2>
+                <div id="level-grid" class="level-grid"></div>
+                <div class="level-info" id="level-info">
+                    <h3 id="level-name">第1关</h3>
+                    <p id="level-desc">新手训练场</p>
+                    <div class="level-stars" id="level-stars"></div>
+                </div>
+                <div class="campaign-buttons">
+                    <button id="start-level-btn" class="menu-btn">开始关卡</button>
+                    <button id="back-from-campaign-btn" class="menu-btn secondary">返回</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="hangar-screen" class="screen hidden">
+            <div class="hangar-content">
+                <h2>机库</h2>
+                <div class="hangar-tabs">
+                    <button class="hangar-tab active" data-tab="aircraft">战机</button>
+                    <button class="hangar-tab" data-tab="wingman">僚机</button>
+                    <button class="hangar-tab" data-tab="equipment" style="display:none">装备</button>
+                </div>
+                <div id="hangar-items" class="hangar-items"></div>
+                <div class="hangar-slots">
+                    <h4>已装备</h4>
+                    <div id="equipped-slots" class="equipped-slots"></div>
+                </div>
+                <button id="back-from-hangar-btn" class="menu-btn secondary">返回</button>
+            </div>
+        </div>
+        
+        <div id="shop-screen" class="screen hidden">
+            <div class="shop-content">
+                <h2>商店</h2>
+                <div class="shop-tabs">
+                    <button class="shop-tab active" data-tab="aircraft">战机</button>
+                    <button class="shop-tab" data-tab="wingman">僚机</button>
+                    <button class="shop-tab" data-tab="equipment" style="display:none">装备</button>
+                </div>
+                <div id="shop-items" class="shop-items"></div>
+                <div class="currency-display">
+                    <span class="currency gold"><span id="shop-gold">0</span> 金币</span>
+                    <span class="currency diamond"><span id="shop-diamond">0</span> 钻石</span>
+                </div>
+                <button id="back-from-shop-btn" class="menu-btn secondary">返回</button>
+            </div>
+        </div>
+        
+        <div id="achievement-screen" class="screen hidden">
+            <div class="achievement-content">
+                <h2>成就</h2>
+                <div class="achievement-level">成就等级: <span id="achievement-level">1</span></div>
+                <div id="achievement-list" class="achievement-list"></div>
+                <button id="back-from-achievement-btn" class="menu-btn secondary">返回</button>
+            </div>
+        </div>
+        
+        <div id="pause-screen" class="screen hidden">
+            <div class="pause-content">
+                <h2>游戏暂停</h2>
+                <button id="resume-btn" class="menu-btn">继续游戏</button>
+                <button id="restart-btn-pause" class="menu-btn secondary">重新开始</button>
+                <button id="surrender-btn" class="menu-btn danger">投降</button>
+                <button id="menu-btn-pause" class="menu-btn secondary">返回主菜单</button>
+            </div>
+        </div>
+        
+        <div id="surrender-screen" class="screen hidden">
+            <div class="surrender-content">
+                <h2>确认投降？</h2>
+                <p class="surrender-warning">投降将结束当前游戏，你的得分将被记录。</p>
+                <button id="confirm-surrender-btn" class="menu-btn danger">确认投降</button>
+                <button id="cancel-surrender-btn" class="menu-btn secondary">取消</button>
+            </div>
+        </div>
+        
+        <div id="revive-screen" class="screen hidden">
+            <div class="revive-content">
+                <h2>游戏结束</h2>
+                <p>是否花费 <span id="revive-cost">500</span> 金币复活？</p>
+                <button id="revive-btn" class="menu-btn">复活</button>
+                <button id="no-revive-btn" class="menu-btn secondary">放弃</button>
+            </div>
+        </div>
+        
+        <div id="level-complete-screen" class="screen hidden">
+            <div class="level-complete-content">
+                <h2>关卡完成！</h2>
+                <div class="level-stars-large" id="complete-stars"></div>
+                <div class="complete-stats">
+                    <p>得分：<span id="complete-score">0</span></p>
+                    <p>用时：<span id="complete-time">0</span>秒</p>
+                </div>
+                <div class="complete-rewards">
+                    <p>奖励：<span id="complete-gold">0</span> 金币 <span id="complete-diamond">0</span> 钻石</p>
+                </div>
+                <button id="next-level-btn" class="menu-btn">下一关</button>
+                <button id="retry-level-btn" class="menu-btn secondary">重试</button>
+                <button id="back-to-campaign-btn" class="menu-btn secondary">返回关卡选择</button>
+            </div>
+        </div>
+        
+        <div id="boss-warning" class="hidden">
+            <span>警告！BOSS来袭！</span>
+        </div>
+        
+        <div id="boss-hud" class="hidden">
+            <div class="boss-health-container">
+                <span class="boss-name" id="boss-name">BOSS</span>
+                <div class="boss-health-bar">
+                    <div id="boss-health-fill" class="boss-health-fill"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="game-over-screen" class="screen hidden">
+            <div class="game-over-content">
+                <h2 id="game-over-title">游戏结束</h2>
+                <div class="final-stats">
+                    <p>最终得分：<span id="final-score">0</span></p>
+                    <p id="survival-time-row" class="hidden">存活时间：<span id="final-time">0</span>秒</p>
+                    <p>到达关卡：<span id="final-level">1</span></p>
+                    <p>击杀敌机：<span id="final-kills">0</span></p>
+                    <p id="new-record" class="hidden new-record">新纪录！</p>
+                </div>
+                <div class="final-rewards">
+                    <p>获得：<span id="final-gold">0</span> 金币</p>
+                </div>
+                <button id="restart-btn" class="menu-btn">重新开始</button>
+                <button id="menu-btn" class="menu-btn secondary">返回主菜单</button>
+            </div>
+        </div>
+        
+        <div id="hud" class="hidden">
+            <div class="hud-left">
+                <div class="hud-item">
+                    <span class="hud-label">分数</span>
+                    <span id="score" class="hud-value">0</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">关卡</span>
+                    <span id="level" class="hud-value">1</span>
+                </div>
+                <div class="hud-item" id="survival-time-hud" style="display:none">
+                    <span class="hud-label">时间</span>
+                    <span id="survival-time" class="hud-value">0:00</span>
+                </div>
+            </div>
+            <div class="hud-right">
+                <div class="hud-item">
+                    <span class="hud-label">生命</span>
+                    <div id="health-bar" class="health-bar">
+                        <div id="health-fill" class="health-fill"></div>
+                    </div>
+                </div>
+                <div class="hud-item power-display">
+                    <span class="hud-label">火力</span>
+                    <span id="power-level" class="hud-value">1</span>
+                </div>
+                <div class="hud-item skill-display">
+                    <span class="hud-label">技能</span>
+                    <div id="skill-cooldown" class="skill-cooldown"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="level-up-notice" class="hidden">
+            <span>关卡 <span id="new-level">2</span></span>
+        </div>
+        
+        <div id="achievement-popup" class="hidden">
+            <span class="achievement-icon">🏆</span>
+            <span class="achievement-text" id="achievement-text">成就解锁！</span>
+        </div>
+    </div>
+    
+    <script src="js/utils/constants.js"></script>
+    <script src="js/utils/gameConfig.js"></script>
+    <script src="js/utils/helpers.js"></script>
+    <script src="js/utils/imageLoader.js"></script>
+    <script src="js/utils/storage.js"></script>
+    <script src="js/utils/sound.js"></script>
+    <script src="js/engine/particle.js"></script>
+    <script src="js/engine/effects.js"></script>
+    <script src="js/engine/collision.js"></script>
+    <script src="js/engine/objectPool.js"></script>
+    <script src="js/entities/bullet.js"></script>
+    <script src="js/entities/enemy.js"></script>
+    <script src="js/entities/boss.js"></script>
+    <script src="js/entities/advancedBoss.js"></script>
+    <script src="js/entities/player.js"></script>
+    <script src="js/entities/advancedPlayer.js"></script>
+    <script src="js/entities/powerup.js"></script>
+    <script src="js/systems/economy.js"></script>
+    <script src="js/systems/level.js"></script>
+    <script src="js/systems/achievement.js"></script>
+    <script src="js/systems/difficulty.js"></script>
+    <script src="js/systems/spawn.js"></script>
+    <script src="js/systems/gameModes.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>

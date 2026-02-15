@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>粒子指挥官 - v5.4 Hotfix</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background-color: #000; font-family: 'Segoe UI', monospace; }
+        
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        #input-video { display: none; }
+        
+        #ui-layer {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            color: rgba(255, 255, 255, 0.9); pointer-events: none;
+        }
+
+        h1 {
+            font-size: 1.6rem; text-transform: uppercase; letter-spacing: 4px;
+            text-shadow: 0 0 20px rgba(0, 150, 255, 0.8); margin-bottom: 10px;
+            font-weight: 800; background: linear-gradient(to right, #fff, #00aaff);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        .status-box {
+            background: rgba(0, 15, 30, 0.85);
+            border-left: 4px solid #00aaff;
+            padding: 12px;
+            border-radius: 4px;
+            width: 300px;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+
+        .row { display: flex; justify-content: space-between; align-items: center; }
+        .label { font-size: 11px; color: #888; font-weight: 700; }
+        .value { font-size: 16px; font-weight: bold; color: #ccc; }
+        
+        .st-gun { color: #ffaa00; text-shadow: 0 0 10px #ffaa00; }
+        .st-fist { color: #00aaff; text-shadow: 0 0 10px #00aaff; }
+        .st-pulse { color: #ff3333; animation: pulse 0.1s; }
+
+        .debug-panel {
+            margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;
+            font-size: 10px; color: #555; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+        }
+        .debug-val { color: #0f0; }
+
+        #webcam-preview {
+            position: absolute; bottom: 20px; left: 20px; 
+            width: 160px; height: 120px;
+            z-index: 10; border: 1px solid #333;
+            transform: scaleX(-1); background: #000;
+        }
+
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #00aaff; background: rgba(0,0,0,0.9); padding: 20px; border: 1px solid #00aaff; z-index: 30;
+            text-align: center;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+    </script>
+</head>
+<body>
+
+    <div id="loading">
+        <div>系统初始化 (v5.4 Hotfix)</div>
+        <div style="font-size:12px; color:#666; margin-top:10px;">正在加载神经引擎...</div>
+    </div>
+
+    <div id="ui-layer">
+        <h1>粒子核心 <span style="font-size:0.5em; border:1px solid #0af; padding:2px;">PRO</span></h1>
+        <div class="status-box">
+            <div class="row">
+                <span class="label">导航系统</span>
+                <span id="nav-status" class="value">等待信号...</span>
+            </div>
+            <div class="row">
+                <span class="label">火控系统</span>
+                <span id="fire-status" class="value">就绪</span>
+            </div>
+            <div class="debug-panel">
+                <div>FPS: <span id="db-fps" class="debug-val">--</span></div>
+                <div>Source: <span id="db-src" class="debug-val" style="color:orange">--</span></div>
+                <div>Index Ratio: <span id="db-ratio" class="debug-val" style="color:yellow">--</span></div>
+                <div>Wrist V: <span id="db-speed" class="debug-val" style="color:cyan">--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <video id="input-video" playsinline muted></video>
+    <canvas id="webcam-preview" width="320" height="240"></canvas>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        // === 1€ 滤波器 ===
+        class OneEuroFilter {
+            constructor(minCutoff=1.0, beta=0.0) {
+                this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = 1.0;
+                this.xPrev = null; this.dxPrev = null; this.tPrev = null;
+            }
+            filter(x, t) {
+                if (this.tPrev === null) { this.xPrev = x; this.dxPrev = 0; this.tPrev = t; return x; }
+                const dt = (t - this.tPrev) || 0.016;
+                const aD = this.sf(dt, this.dCutoff);
+                const dx = (x - this.xPrev) / dt;
+                const dxHat = aD * dx + (1 - aD) * this.dxPrev;
+                const cutoff = this.minCutoff + this.beta * Math.abs(dxHat);
+                const a = this.sf(dt, cutoff);
+                const xHat = a * x + (1 - a) * this.xPrev;
+                this.xPrev = xHat; this.dxPrev = dxHat; this.tPrev = t;
+                return xHat;
+            }
+            sf(dt, cutoff) { const r = 2 * Math.PI * cutoff * dt; return r / (r + 1); }
+        }
+
+        // === 配置 ===
+        const CONFIG = { particleCount: 1200, aiInterval: 50 }; // 降低间隔以提高响应
+        let scene, camera, renderer, composer, material, time = 0;
+        let currentSpeed = 0, targetSpeed = 0;
+        
+        let filters = {};
+        let lastState = 'idle';
+        let isFiring = false;
+        
+        let isProcessingAI = false;
+        let lastAITime = 0; 
+        
+        let lastIndexRatio = 0;
+        let lastWristSpeed = 0;
+        let prevY = { index:0, middle:0 };
+        let lastWristPos = null;
+        let lastWristTime = 0;
+
+        // 修复：确保所有元素都在 HTML 中存在
+        const els = {
+            nav: document.getElementById('nav-status'),
+            fire: document.getElementById('fire-status'),
+            fps: document.getElementById('db-fps'),
+            src: document.getElementById('db-src'),
+            ratio: document.getElementById('db-ratio'),
+            speed: document.getElementById('db-speed'),
+            loading: document.getElementById('loading')
+        };
+
+        // === 1. 粒子系统 ===
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.002);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 1000);
+            camera.position.z = 200;
+            
+            renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance", antialias: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            container.appendChild(renderer.domElement);
+
+            const renderPass = new RenderPass(scene, camera);
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth/2, window.innerHeight/2), 1.0, 0.5, 0.85);
+            bloomPass.threshold = 0.2; bloomPass.strength = 1.2; bloomPass.radius = 0.3;
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderPass);
+            composer.addPass(bloomPass);
+
+            createParticles();
+        }
+
+        function createParticles() {
+            const geo = new THREE.BufferGeometry();
+            const count = CONFIG.particleCount;
+            const pos = new Float32Array(count * 3);
+            const col = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            const c1 = new THREE.Color(0x00aaff), c2 = new THREE.Color(0xffaa00);
+
+            for(let i=0; i<count; i++) {
+                const r = 50 + Math.random() * 300;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                pos[i*3] = r * Math.sin(phi) * Math.cos(theta);
+                pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+                pos[i*3+2] = r * Math.cos(phi);
+                const c = Math.random() > 0.6 ? c1 : c2;
+                col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+                sizes[i] = Math.random() * 1.5 + 0.5;
+            }
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+            geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            material = new THREE.ShaderMaterial({
+                vertexShader: `
+                    uniform float uTime; uniform float uSpeed;
+                    attribute vec3 color; attribute float size;
+                    varying vec3 vColor;
+                    void main() {
+                        vColor = color;
+                        vec3 p = position;
+                        p.z += mod(uTime * uSpeed * 20.0 + position.z + 250.0, 500.0) - 250.0;
+                        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+                        gl_PointSize = size * (300.0 / -mv.z);
+                        gl_Position = projectionMatrix * mv;
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vColor;
+                    void main() {
+                        if (length(gl_PointCoord - 0.5) > 0.5) discard;
+                        gl_FragColor = vec4(vColor, 0.8);
+                    }
+                `,
+                uniforms: { uTime: { value: 0 }, uSpeed: { value: 0 } },
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            scene.add(new THREE.Points(geo, material));
+        }
+
+        // === 2. 逻辑核心 ===
+        function analyzeHand(rawLandmarks) {
+            const now = Date.now() / 1000;
+            
+            if (!filters[0]) {
+                for (let i = 0; i < 21; i++) filters[i] = {
+                    x: new OneEuroFilter(1.0, 0.007), y: new OneEuroFilter(1.0, 0.007), z: new OneEuroFilter(1.0, 0.007)
+                };
+            }
+
+            const lm = rawLandmarks.map((p, i) => ({
+                x: filters[i].x.filter(p.x, now),
+                y: filters[i].y.filter(p.y, now),
+                z: p.z ? filters[i].z.filter(p.z, now) : 0
+            }));
+
+            const d = (i1, i2) => Math.hypot(lm[i1].x - lm[i2].x, lm[i1].y - lm[i2].y);
+            
+            const indexLen = d(8, 0);
+            const indexBase = d(5, 0);
+            const indexRatio = indexBase > 0 ? indexLen / indexBase : 0;
+            lastIndexRatio = indexRatio;
+
+            const middleLen = d(12, 0);
+            const middleBase = d(9, 0);
+            const middleCurled = middleLen < middleBase * 1.3; 
+
+            let wristSpeed = 0;
+            if (lastWristPos) {
+                const dt = now - lastWristTime;
+                if (dt > 0) {
+                    const dist = Math.hypot(lm[0].x - lastWristPos.x, lm[0].y - lastWristPos.y);
+                    wristSpeed = dist / dt;
+                }
+            }
+            lastWristPos = lm[0];
+            lastWristTime = now;
+            lastWristSpeed = wristSpeed;
+
+            let gesture = lastState;
+            
+            if (lastState === 'idle') {
+                if (indexRatio > 1.15 && middleCurled) gesture = 'gun';
+                else if (indexRatio < 0.9 && middleCurled) gesture = 'fist';
+            } 
+            else if (lastState === 'gun') {
+                if (indexRatio < 0.85) gesture = 'fist'; 
+                else if (!middleCurled && middleLen > middleBase * 1.5) gesture = 'idle';
+            }
+            else if (lastState === 'fist') {
+                if (indexRatio > 1.1) gesture = 'gun';
+                else if (!middleCurled) gesture = 'idle';
+            }
+            
+            lastState = gesture;
+
+            let isRecoil = false;
+            let isVeto = false;
+
+            if (gesture === 'gun') {
+                if (wristSpeed > 0.5) { 
+                    isVeto = true;
+                } else {
+                    const vIndex = prevY.index - lm[8].y; 
+                    const vMiddle = prevY.middle - lm[12].y;
+                    
+                    if (vIndex > 0.03) {
+                        if (vMiddle < vIndex * 0.5) { 
+                            if (!isFiring) {
+                                isRecoil = true;
+                                isFiring = true;
+                            }
+                        } else {
+                            isVeto = true; 
+                        }
+                    } else if (vIndex < 0.01) {
+                        isFiring = false; 
+                    }
+                }
+            } else {
+                isFiring = false;
+            }
+
+            prevY.index = lm[8].y;
+            prevY.middle = lm[12].y;
+
+            return { gesture, isRecoil, isVeto };
+        }
+
+        function updateUI(data) {
+            els.ratio.innerText = lastIndexRatio.toFixed(2);
+            els.speed.innerText = lastWristSpeed.toFixed(2);
+
+            if (!data) {
+                targetSpeed = 0;
+                els.nav.innerText = "信号丢失";
+                els.nav.className = "value";
+                els.fire.innerText = "--";
+                return;
+            }
+
+            const { gesture, isRecoil, isVeto } = data;
+
+            if (gesture === 'fist') {
+                targetSpeed = -1.5;
+                els.nav.innerText = "◀ 后撤 (握拳)";
+                els.nav.className = "value st-fist";
+            } else if (gesture === 'gun') {
+                targetSpeed = 2.0;
+                els.nav.innerText = "▶ 突击 (手枪)";
+                els.nav.className = "value st-gun";
+            } else {
+                targetSpeed = 0;
+                els.nav.innerText = "● 悬停";
+                els.nav.className = "value";
+            }
+
+            if (isRecoil) {
+                els.fire.innerText = "⚡ 脉冲发射";
+                els.fire.className = "value st-pulse";
+                triggerFlash();
+            } else if (isVeto) {
+                els.fire.innerText = "⚠️ 动态锁定";
+                els.fire.style.color = "#ff5500";
+            } else {
+                els.fire.innerText = "就绪";
+                els.fire.style.color = "#444";
+            }
+        }
+
+        function triggerFlash() {
+            camera.position.x = (Math.random()-0.5)*10;
+            camera.position.y = (Math.random()-0.5)*10;
+            setTimeout(()=>camera.position.set(0,0,200), 50);
+        }
+
+        window.onload = function() {
+            initThree();
+            const videoEl = document.getElementById('input-video');
+            const previewCanvas = document.getElementById('webcam-preview');
+            const pCtx = previewCanvas.getContext('2d');
+
+            // 1. 先启动 Camera Utils，确保画面能出来
+            const cameraUtils = new Camera(videoEl, {
+                onFrame: async () => {
+                    const now = Date.now();
+                    
+                    // 强制在每一帧都绘制摄像头画面（绕过 AI 频率限制）
+                    pCtx.save();
+                    pCtx.clearRect(0,0,320,240);
+                    // 确保 videoEl 有内容再画
+                    if (videoEl.videoWidth > 0) {
+                        pCtx.drawImage(videoEl, 0, 0, 320, 240);
+                    }
+                    pCtx.restore();
+
+                    // 控制 AI 推理频率
+                    if (now - lastAITime < CONFIG.aiInterval) return;
+                    if (!isProcessingAI) {
+                        isProcessingAI = true;
+                        lastAITime = now;
+                        // 仅发送给 AI，不处理绘制
+                        await hands.send({image: videoEl});
+                    }
+                },
+                width: 320, height: 240
+            });
+
+            // 2. 初始化 Hands
+            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            hands.setOptions({maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
+            
+            hands.onResults(results => {
+                isProcessingAI = false; 
+                
+                // 修复：移除导致 crash 的 lat.innerText 赋值
+                // 修复：在这里隐藏 loading，确保只有在 AI 第一次成功返回后才隐藏
+                if (els.loading.style.display !== 'none') {
+                    els.loading.style.display = 'none';
+                }
+
+                // 补充绘制骨架（叠加在 cameraUtils 画好的图上）
+                pCtx.save();
+                let data = null;
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    let lm;
+                    if (results.multiWorldLandmarks && results.multiWorldLandmarks.length > 0) {
+                        lm = results.multiWorldLandmarks[0];
+                        els.src.innerText = "3D (精准)";
+                    } else {
+                        lm = results.multiHandLandmarks[0];
+                        els.src.innerText = "2D (兼容)";
+                    }
+                    
+                    drawConnectors(pCtx, results.multiHandLandmarks[0], HAND_CONNECTIONS, {color: '#00ff00', lineWidth: 2});
+                    data = analyzeHand(lm);
+                } else {
+                    els.src.innerText = "--";
+                }
+                
+                updateUI(data);
+                pCtx.restore();
+            });
+
+            // 3. 启动
+            cameraUtils.start()
+                .then(() => console.log("Camera started"))
+                .catch(e => {
+                    console.error(e);
+                    els.loading.innerText = "摄像头启动失败: " + e.message;
+                });
+
+            let lastFrame = 0;
+            function renderLoop(t) {
+                requestAnimationFrame(renderLoop);
+                if (t - lastFrame > 500) {
+                    els.fps.innerText = Math.round(1000 / (t - lastFrame) * 30);
+                    lastFrame = t;
+                }
+                time += 0.01;
+                currentSpeed += (targetSpeed - currentSpeed) * 0.1;
+                if (material) { material.uniforms.uTime.value = time; material.uniforms.uSpeed.value = currentSpeed; }
+                composer.render();
+            }
+            renderLoop(0);
+        };
+    </script>
+</body>
+</html>
