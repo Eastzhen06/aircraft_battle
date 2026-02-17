@@ -3,13 +3,9 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 
 // === 机型配置表 v2.1 ===
 export const PLANE_TYPES = {
-    // 游骑兵: 双排直射 (在 game.js 中实现双排逻辑)
     'Ranger': { speed: 1.0, hp: 100, shield: 3, bulletType: 'straight', asset: 'Ranger' },
-    // 拦截者: 扇形散射
     'Interceptor': { speed: 1.5, hp: 80, shield: 2, bulletType: 'spread', asset: 'Interceptor' },
-    // 重装堡垒: 高伤穿透
     'Fortress': { speed: 0.8, hp: 150, shield: 5, bulletType: 'pierce', asset: 'Fortress' },
-    // 虚空轰炸机: 慢速AOE (新机制)
     'VoidBomber': { speed: 0.9, hp: 100, shield: 3, bulletType: 'bomb', asset: 'VoidBomber' }
 };
 
@@ -31,7 +27,7 @@ export default class Player {
         this.y = y;
         
         this.config = config;
-        this.hp = config.hp; // 实装 HP
+        this.hp = config.hp;
         this.shieldCount = config.shield;
         this.isShieldActive = false;
         this.shieldTimer = 0;
@@ -92,7 +88,9 @@ export default class Player {
 
     draw(ctx) {
         if (this.isShieldActive) {
-            const shieldRadius = Math.max(this.width, this.height) * 0.75;
+            // v2.2 Update: 缩小护盾半径 (0.75 -> 0.65)
+            const shieldRadius = Math.max(this.width, this.height) * 0.65;
+            
             const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
             ctx.fillStyle = `rgba(0, 180, 255, ${alpha})`;
             ctx.beginPath();

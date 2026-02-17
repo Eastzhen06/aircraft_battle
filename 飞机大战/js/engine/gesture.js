@@ -97,26 +97,33 @@ export default class GestureEngine {
 
         const wrist = landmarks[0];
 
-        // === 核心算法优化 v2.1 ===
+        // === 核心算法优化 v2.2 ===
         
-        // 1. 手指伸直判定 (更宽松的阈值)
+        // 1. 手指伸直判定 (增加距离比率校验，解决 Z 轴压缩问题)
         const isFingerStraight = (mcpIdx, tipIdx) => {
             const palmToMcp = vec.sub(landmarks[mcpIdx], wrist);
             const mcpToTip = vec.sub(landmarks[tipIdx], landmarks[mcpIdx]);
-            // 降低阈值到 0.35 (约 70度夹角)，解决右手垂直指向时 Z 轴压缩导致的问题
+            
+            // 角度判定 (阈值 0.35)
             const dot = vec.dot(vec.normalize(palmToMcp), vec.normalize(mcpToTip));
-            return dot > 0.35; 
+            const anglePass = dot > 0.35;
+
+            // 距离比率判定 (新逻辑)
+            // 如果 指尖到手腕距离 / 指根到手腕距离 > 1.2，说明手指物理上是伸展的
+            const distTip = vec.dist(landmarks[tipIdx], wrist);
+            const distMcp = vec.dist(landmarks[mcpIdx], wrist);
+            const ratioPass = (distTip / distMcp) > 1.2;
+
+            return anglePass || ratioPass; // 只要满足其一即可
         };
 
         const isFingerCurled = (mcpIdx, tipIdx) => {
             return vec.dist(landmarks[tipIdx], wrist) < vec.dist(landmarks[mcpIdx], wrist);
         };
 
-        // 2. 拇指状态 (关键：用于区分拳头和手枪)
-        // 拇指指尖如果远离食指指根(5号点)，说明是大张开的
+        // 2. 拇指状态
         const thumbOut = vec.dist(landmarks[4], landmarks[5]) > vec.dist(landmarks[3], landmarks[5]);
 
-        // 各指状态
         const indexStraight = isFingerStraight(5, 8);
         const middleCurled = isFingerCurled(9, 12);
         const ringCurled = isFingerCurled(13, 16);
@@ -125,21 +132,19 @@ export default class GestureEngine {
         let isGun = false;
         let isFist = false;
 
-        // FIST 判定：严格模式
-        // 必须 4指卷曲 且 拇指没有明显张开 (防止手枪误判为拳头)
-        if (!indexStraight && middleCurled && ringCurled && pinkyCurled && !thumbOut) {
+        // FIST 判定 v2.2: 移除 thumbOut 限制，提高鲁棒性
+        // 只要 4 指卷曲，就算握拳 (忽略大拇指)
+        if (!indexStraight && middleCurled && ringCurled && pinkyCurled) {
             isFist = true;
         }
         
-        // GUN 判定：宽松模式
-        // 食指直 + (中指、无名指、小指 至少2个卷曲)
+        // GUN 判定
         const curledCount = (middleCurled ? 1 : 0) + (ringCurled ? 1 : 0) + (pinkyCurled ? 1 : 0);
         if (indexStraight && curledCount >= 2) {
             isGun = true;
         }
 
-        // 状态机 (加入优先级锁)
-        // 如果物理特征同时满足 Gun 和 Fist (极少见)，优先判 Gun
+        // 优先级锁: 如果同时满足 Gun 和 Fist，优先判 Gun
         if (isGun && isFist) isFist = false;
 
         switch (this.lastState) {
@@ -152,7 +157,7 @@ export default class GestureEngine {
                 else if (!isGun) this.lastState = 'IDLE';
                 break;
             case 'FIST':
-                if (isGun) this.lastState = 'GUN'; // 允许秒切
+                if (isGun) this.lastState = 'GUN';
                 else if (!isFist) this.lastState = 'IDLE';
                 break;
         }
