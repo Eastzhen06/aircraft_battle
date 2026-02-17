@@ -1,15 +1,15 @@
 import { FilesetResolver, HandLandmarker, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm";
 
-// --- 向量数学工具库 ---
 const vec = {
-    // 向量减法
     sub: (v1, v2) => ({ x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z }),
-    // 向量长度
     len: (v) => Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z),
-    // 向量点积
     dot: (v1, v2) => v1.x * v2.x + v1.y * v2.y + v1.z * v2.z,
-    // 计算两点距离
-    dist: (v1, v2) => vec.len(vec.sub(v1, v2))
+    dist: (v1, v2) => vec.len(vec.sub(v1, v2)),
+    // 新增：归一化
+    normalize: (v) => {
+        const l = vec.len(v);
+        return l > 0 ? { x: v.x / l, y: v.y / l, z: v.z / l } : { x: 0, y: 0, z: 0 };
+    }
 };
 
 class OneEuroFilter {
@@ -19,11 +19,7 @@ export default class GestureEngine {
     constructor() {
         this.handLandmarker = null; this.webcamRunning = false; this.video = null;
         this.debugCanvas = null; this.gameCanvas = null; this.drawingUtils = null;
-        
-        // 增加 isDetected 标志位，解决出生点 (0,0) 问题
         this.inputState = { x: 0, y: 0, gesture: 'IDLE', isDetected: false };
-        
-        // 滤波器
         this.filters = Array(21).fill(null).map(() => ({ x: new OneEuroFilter(1,.007), y: new OneEuroFilter(1,.007), z: new OneEuroFilter(1,.007) }));
         
         this.lastState = 'IDLE'; 
@@ -31,9 +27,8 @@ export default class GestureEngine {
         this.lastFireTime = 0;
         this.lastVideoTime = -1;
         
-        // 算法增强变量
         this.prevIndexTipToWristDist = 0;
-        this.gunStabilityTimer = 0; // 枪身稳定计时器，防止误触
+        this.gunStabilityTimer = 0; 
     }
 
     async init(a,b,c){this.video=a;this.debugCanvas=b;this.gameCanvas=c;this.debugCtx=this.debugCanvas.getContext("2d");this.drawingUtils=new DrawingUtils(this.debugCtx);try{const d=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");this.handLandmarker=await HandLandmarker.createFromOptions(d,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",delegate:"GPU"},runningMode:"VIDEO",numHands:1,minDetectionConfidence:.5,minTrackingConfidence:.5});this.startWebcam()}catch(d){console.error("GestureEngine init failed:",d)}}
@@ -65,143 +60,137 @@ export default class GestureEngine {
     processResults(results) {
         const ctx = this.debugCtx;
         const canvas = this.debugCanvas;
-        
-        // 1. 清除画布
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         ctx.save();
-        // 2. 统一镜像翻转：视频和骨架都在这个变换下绘制
         ctx.scale(-1, 1);
         ctx.translate(-canvas.width, 0);
         
-        // 3. 绘制视频底图
         if (this.video.readyState >= 2) {
             ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
         }
         
-        // 4. 绘制骨架 (如果存在)
         if (results.landmarks && results.landmarks.length > 0) {
             this.drawingUtils.drawConnectors(results.landmarks[0], HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
             this.drawingUtils.drawLandmarks(results.landmarks[0], { color: "#FF0000", radius: 3 });
-            
-            // 5. 分析手势
             this.analyzeHand(results.landmarks[0]);
             this.inputState.isDetected = true;
         } else {
             this.inputState.gesture = 'IDLE';
             this.inputState.isDetected = false;
-            this.gunStabilityTimer = 0; // 丢失追踪时重置计时器
+            this.gunStabilityTimer = 0;
         }
-        
         ctx.restore();
     }
 
+    // === 任务 2 核心优化：鲁棒性手势算法 ===
     analyzeHand(rawLandmarks) {
         const now = Date.now() / 1000;
-        // 滤波处理
         const landmarks = rawLandmarks.map((p, i) => ({ 
             x: this.filters[i].x.filter(p.x, now), 
             y: this.filters[i].y.filter(p.y, now), 
             z: this.filters[i].z.filter(p.z, now) 
         }));
 
-        // 坐标映射 (注意这里要处理镜像逻辑: 1 - x)
         if (this.gameCanvas) {
             this.inputState.x = (1 - landmarks[0].x) * this.gameCanvas.width;
             this.inputState.y = landmarks[0].y * this.gameCanvas.height;
         }
 
-        // === 核心算法：独立手指弯曲度检测 ===
-        // 获取关键点
         const wrist = landmarks[0];
-        
-        // 判断手指是否伸直 (Straight) 或 弯曲 (Curled)
-        // 算法：比较 指尖到掌心的距离 vs 指关节到掌心的距离
-        const isFingerCurled = (tipIdx, pipIdx) => {
-            return vec.dist(landmarks[tipIdx], wrist) < vec.dist(landmarks[pipIdx], wrist);
+
+        // 辅助函数：计算手指的弯曲程度 (0~180度，0=直，180=完全折叠)
+        // 使用向量夹角，不受手腕旋转影响
+        const getFingerBendAngle = (base, pip, tip) => {
+            const v1 = vec.sub(pip, base); // 掌骨到指骨
+            const v2 = vec.sub(tip, pip);  // 指骨到指尖
+            const n1 = vec.normalize(v1);
+            const n2 = vec.normalize(v2);
+            // 点积公式: a·b = |a||b|cosθ. 归一化后 |a||b|=1.
+            const dot = Math.max(-1, Math.min(1, vec.dot(n1, n2))); 
+            const angleRad = Math.acos(dot);
+            return angleRad * (180 / Math.PI); // 转为角度
         };
+
+        // 食指 (Index) 5, 6, 8 (MCP -> PIP -> TIP)
+        // 注意：MediaPipe 手指有 4 个点。简单起见，对比 5->6 和 6->8 的方向，
+        // 或者对比 0->5 (掌骨) 和 5->8 (手指整体) 的方向。
+        // 这里使用更鲁棒的：掌心到指根(0->MCP) vs 指根到指尖(MCP->TIP)
+        const isFingerStraight = (mcpIdx, tipIdx) => {
+            const palmToMcp = vec.sub(landmarks[mcpIdx], wrist);
+            const mcpToTip = vec.sub(landmarks[tipIdx], landmarks[mcpIdx]);
+            // 如果两个向量方向一致，点积接近 1
+            const dot = vec.dot(vec.normalize(palmToMcp), vec.normalize(mcpToTip));
+            return dot > 0.5; // 宽松判定：夹角小于 60 度都算直
+        };
+
+        const isFingerCurled = (mcpIdx, tipIdx) => {
+            // 简单距离判定依然有效且计算量小：指尖距离手腕 比 指根距离手腕 近
+            return vec.dist(landmarks[tipIdx], wrist) < vec.dist(landmarks[mcpIdx], wrist);
+        };
+
+        // 1. 食指状态 (Index 5-8)
+        const indexStraight = isFingerStraight(5, 8);
         
-        // 食指 (Index) 5-8
-        // 中指 (Middle) 9-12
-        // 无名指 (Ring) 13-16
-        // 小指 (Pinky) 17-20
+        // 2. 其他三指状态 (Middle 9-12, Ring 13-16, Pinky 17-20)
+        const middleCurled = isFingerCurled(9, 12);
+        const ringCurled = isFingerCurled(13, 16);
+        const pinkyCurled = isFingerCurled(17, 20);
         
-        // 这里我们不仅看距离，还看向量方向，更精准
-        // 计算食指是否伸直：食指向量 与 掌心向量 的夹角
-        const indexVector = vec.sub(landmarks[8], landmarks[5]);
-        const palmVector = vec.sub(landmarks[5], wrist); // 大致方向
-        // 简单判定：食指伸直
-        const indexStraight = !isFingerCurled(8, 5); 
-        
-        // 其他三指状态
-        const middleCurled = isFingerCurled(12, 9);
-        const ringCurled = isFingerCurled(16, 13);
-        const pinkyCurled = isFingerCurled(20, 17);
-        
-        // 状态判定逻辑
         let isGun = false;
         let isFist = false;
 
-        // FIST: 必须 4 根手指全部卷曲 (大拇指不强制)
+        // FIST: 4指全部卷曲
         if (!indexStraight && middleCurled && ringCurled && pinkyCurled) {
             isFist = true;
         }
         
-        // GUN: 食指必须伸直，且至少有两根其他手指是卷曲的 (宽容度处理，防止无名指没压住导致的误判)
-        if (indexStraight && middleCurled && pinkyCurled) {
+        // GUN: 食指直 + (中指、无名指、小指 至少2个卷曲，提高鲁棒性)
+        const curledCount = (middleCurled ? 1 : 0) + (ringCurled ? 1 : 0) + (pinkyCurled ? 1 : 0);
+        if (indexStraight && curledCount >= 2) {
             isGun = true;
         }
 
-        // 状态机滞后处理 (Hysteresis)
+        // 状态机滞后处理
         switch (this.lastState) {
             case 'IDLE':
                 if (isGun) this.lastState = 'GUN';
                 else if (isFist) this.lastState = 'FIST';
                 break;
             case 'GUN':
-                // 从 GUN 退出需要更严格的条件，防止闪烁
                 if (isFist) this.lastState = 'FIST';
                 else if (!isGun) this.lastState = 'IDLE';
                 break;
             case 'FIST':
-                if (isGun) this.lastState = 'GUN'; // 允许直接变枪
+                if (isGun) this.lastState = 'GUN';
                 else if (!isFist) this.lastState = 'IDLE';
                 break;
         }
         
-        // === 必杀技 (RECOIL) 检测 ===
+        // RECOIL (射击动作) 鲁棒性优化
         let isRecoil = false;
-        
-        // 只有在 GUN 状态稳定了一段时间后，才检测 RECOIL
         if (this.lastState === 'GUN') {
             this.gunStabilityTimer++;
         } else {
             this.gunStabilityTimer = 0;
         }
         
-        // 阈值：稳定 10 帧 (约 0.16s) 且 未在开火冷却中
-        if (this.gunStabilityTimer > 10 && !this.isFiring) {
+        // 必须稳定 5 帧以上才检测后坐力，防止状态切换时的抖动
+        if (this.gunStabilityTimer > 5 && !this.isFiring) {
             const indexTipToWristDist = vec.dist(landmarks[8], wrist);
-            // 计算径向速度
-            const radialVelocity = (indexTipToWristDist - this.prevIndexTipToWristDist) / 0.016; // 假设 60fps
+            const radialVelocity = (indexTipToWristDist - this.prevIndexTipToWristDist) / 0.016;
             
-            // 提高阈值到 0.5，防止挠头误触
+            // 速度阈值 0.5
             if (radialVelocity > 0.5) {
                 isRecoil = true;
                 this.isFiring = true;
                 this.lastFireTime = now;
-                console.log("🚀 RECOIL TRIGGERED! Velocity:", radialVelocity);
             }
         }
-
-        // 冷却重置
-        if (now - this.lastFireTime > 0.5) this.isFiring = false;
+        if (now - this.lastFireTime > 0.2) this.isFiring = false; // 射速限制
         
         this.inputState.gesture = isRecoil ? 'RECOIL' : this.lastState;
-        this.prevIndexTipToWristDist = vec.dist(landmarks[8], wrist); // 更新上一帧距离
-        
-        // 调试输出 (可选，不调试时可注释)
-        // console.log(`G: ${this.inputState.gesture} | I:${indexStraight} M:${middleCurled}`);
+        this.prevIndexTipToWristDist = vec.dist(landmarks[8], wrist);
     }
 
     getInputState() { return this.inputState; }

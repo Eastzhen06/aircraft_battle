@@ -10,11 +10,15 @@ class Game {
         this.startScreen = document.getElementById('start-screen');
         this.gameContainer = document.getElementById('game-container');
         this.pauseBtn = document.getElementById('pause-btn');
-        this.pauseScreen = document.getElementById('pause-screen'); // 修复暂停引用
+        this.pauseScreen = document.getElementById('pause-screen');
         this.debugCanvas = document.getElementById('debugCanvas');
         this.shieldCountUI = document.getElementById('shield-count');
         this.accountIcon = document.getElementById('account-icon');
         this.devModal = document.getElementById('dev-modal');
+        
+        // 新增 UI 引用
+        this.adminPanel = document.getElementById('admin-debug-panel');
+        this.planeNameUI = document.getElementById('selected-plane-name');
 
         this.state = 'MENU';
         this.lastTime = 0;
@@ -26,6 +30,7 @@ class Game {
         this.player = null;
         this.bullets = [];
         this.currentPlaneType = 'Ranger'; // 默认机型
+        this.isAdmin = false; // 管理员状态
     }
 
     init() {
@@ -38,14 +43,12 @@ class Game {
         console.log("Starting image loading...");
         this.imageLoader.load(ASSET_SOURCES, () => {
             console.log("All images loaded successfully!");
-            // 这里可以预加载一些东西，或者只是等待
         });
     }
 
     setupEventListeners() {
         document.getElementById('start-btn').addEventListener('click', () => this.startGame());
         
-        // 修复暂停按钮逻辑
         this.pauseBtn.addEventListener('click', () => this.togglePause());
         document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
         document.getElementById('restart-btn-pause').addEventListener('click', () => {
@@ -53,10 +56,9 @@ class Game {
             this.startGame();
         });
         document.getElementById('menu-btn-pause').addEventListener('click', () => {
-             location.reload(); // 简单粗暴回主菜单
+             location.reload(); 
         });
 
-        // 修复账户图标点击
         if (this.accountIcon) {
             this.accountIcon.addEventListener('click', () => {
                 this.devModal.classList.toggle('hidden');
@@ -64,6 +66,44 @@ class Game {
         }
         document.getElementById('dev-modal-close-btn').addEventListener('click', () => {
             this.devModal.classList.add('hidden');
+        });
+
+        // === 任务 1：管理员鉴权逻辑 ===
+        document.getElementById('login-submit-btn').addEventListener('click', () => {
+            const acc = document.getElementById('login-account').value;
+            const pwd = document.getElementById('login-password').value;
+
+            if (acc === '0001' && pwd === '1011') {
+                this.isAdmin = true;
+                this.devModal.classList.add('hidden');
+                this.adminPanel.classList.remove('hidden'); // 解锁调试面板
+                alert("管理员身份已验证！调试模式开启。");
+            } else {
+                alert("账号或密码错误！");
+            }
+        });
+
+        // === 任务 3：机型切换逻辑 ===
+        const planeBtns = document.querySelectorAll('.plane-btn');
+        planeBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // 移除其他按钮激活状态
+                planeBtns.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+
+                // 设置机型
+                const type = e.target.dataset.type;
+                this.currentPlaneType = type;
+                
+                // 更新 UI 显示
+                const planeConfig = PLANE_TYPES[type];
+                // 这里简单做一个映射，或者直接显示 Type ID
+                const nameMap = {
+                    'Ranger': '游骑兵', 'Interceptor': '拦截者',
+                    'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸'
+                };
+                this.planeNameUI.textContent = nameMap[type] || type;
+            });
         });
     }
 
@@ -84,12 +124,10 @@ class Game {
         this.state = 'PLAYING';
         this.lastTime = performance.now();
 
-        // 实例化 Player, 传入 ImageLoader 而不是 Image 对象，以便 Player 内部获取配置
-        // 初始位置: 屏幕底中
+        // 使用当前选择的 currentPlaneType 创建玩家
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType);
         this.bullets = [];
 
-        // 初始化手势引擎 (单例模式防重复)
         if (!this.gestureEngine.webcamRunning) {
             const video = document.createElement('video');
             video.style.display = 'none';
@@ -107,7 +145,7 @@ class Game {
         } else if (this.state === 'PAUSED') {
             this.state = 'PLAYING';
             this.pauseScreen.classList.add('hidden');
-            this.lastTime = performance.now(); // 防止 deltaTime 激增
+            this.lastTime = performance.now();
             this.gameLoop(performance.now());
         }
     }
@@ -129,7 +167,6 @@ class Game {
         const input = this.gestureEngine.getInputState();
         const shouldShoot = this.player.update(input, this.deltaTime, this.canvas);
 
-        // === 核心修复: 弹道工厂 ===
         if (shouldShoot) {
             const bType = this.player.bulletType;
             const px = this.player.x;
@@ -139,10 +176,9 @@ class Game {
                 this.bullets.push(new Bullet(px, py, 800, 10, 'straight'));
             } 
             else if (bType === 'spread') {
-                // 扇形散射: 3 发
-                this.bullets.push(new Bullet(px, py, 800, 6, 'spread', -0.2)); // 左偏
-                this.bullets.push(new Bullet(px, py, 800, 6, 'spread', 0));    // 中
-                this.bullets.push(new Bullet(px, py, 800, 6, 'spread', 0.2));  // 右偏
+                this.bullets.push(new Bullet(px, py, 800, 6, 'spread', -0.2));
+                this.bullets.push(new Bullet(px, py, 800, 6, 'spread', 0));
+                this.bullets.push(new Bullet(px, py, 800, 6, 'spread', 0.2));
             }
             else if (bType === 'pierce') {
                  this.bullets.push(new Bullet(px, py, 600, 20, 'pierce'));
@@ -164,8 +200,6 @@ class Game {
 
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // 简单星空背景 (可选，暂时用纯色)
         this.ctx.fillStyle = '#0a0a1a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
