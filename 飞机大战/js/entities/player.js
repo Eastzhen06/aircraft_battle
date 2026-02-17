@@ -1,11 +1,15 @@
 const LERP_FACTOR = 0.15;
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-// 机型配置表
+// === 机型配置表 v2.1 ===
 export const PLANE_TYPES = {
+    // 游骑兵: 双排直射 (在 game.js 中实现双排逻辑)
     'Ranger': { speed: 1.0, hp: 100, shield: 3, bulletType: 'straight', asset: 'Ranger' },
+    // 拦截者: 扇形散射
     'Interceptor': { speed: 1.5, hp: 80, shield: 2, bulletType: 'spread', asset: 'Interceptor' },
+    // 重装堡垒: 高伤穿透
     'Fortress': { speed: 0.8, hp: 150, shield: 5, bulletType: 'pierce', asset: 'Fortress' },
+    // 虚空轰炸机: 慢速AOE (新机制)
     'VoidBomber': { speed: 0.9, hp: 100, shield: 3, bulletType: 'bomb', asset: 'VoidBomber' }
 };
 
@@ -14,9 +18,7 @@ export default class Player {
         const config = PLANE_TYPES[type];
         this.image = imageLoader.get(config.asset);
         
-        // === 任务 4：资产缩放 ===
-        // 原大小: window.innerWidth * 0.15
-        // 新大小: 0.15 * 0.85 = 0.1275
+        // 尺寸适配: 0.85倍缩放
         this.width = window.innerWidth * 0.15 * 0.85; 
         
         if (this.image && this.image.width > 0) {
@@ -29,6 +31,7 @@ export default class Player {
         this.y = y;
         
         this.config = config;
+        this.hp = config.hp; // 实装 HP
         this.shieldCount = config.shield;
         this.isShieldActive = false;
         this.shieldTimer = 0;
@@ -89,7 +92,6 @@ export default class Player {
 
     draw(ctx) {
         if (this.isShieldActive) {
-            // 护盾大小跟随飞机大小自动缩小
             const shieldRadius = Math.max(this.width, this.height) * 0.75;
             const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
             ctx.fillStyle = `rgba(0, 180, 255, ${alpha})`;

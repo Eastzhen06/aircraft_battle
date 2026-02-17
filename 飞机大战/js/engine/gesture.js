@@ -5,7 +5,6 @@ const vec = {
     len: (v) => Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z),
     dot: (v1, v2) => v1.x * v2.x + v1.y * v2.y + v1.z * v2.z,
     dist: (v1, v2) => vec.len(vec.sub(v1, v2)),
-    // 新增：归一化
     normalize: (v) => {
         const l = vec.len(v);
         return l > 0 ? { x: v.x / l, y: v.y / l, z: v.z / l } : { x: 0, y: 0, z: 0 };
@@ -83,7 +82,6 @@ export default class GestureEngine {
         ctx.restore();
     }
 
-    // === 任务 2 核心优化：鲁棒性手势算法 ===
     analyzeHand(rawLandmarks) {
         const now = Date.now() / 1000;
         const landmarks = rawLandmarks.map((p, i) => ({ 
@@ -99,40 +97,27 @@ export default class GestureEngine {
 
         const wrist = landmarks[0];
 
-        // 辅助函数：计算手指的弯曲程度 (0~180度，0=直，180=完全折叠)
-        // 使用向量夹角，不受手腕旋转影响
-        const getFingerBendAngle = (base, pip, tip) => {
-            const v1 = vec.sub(pip, base); // 掌骨到指骨
-            const v2 = vec.sub(tip, pip);  // 指骨到指尖
-            const n1 = vec.normalize(v1);
-            const n2 = vec.normalize(v2);
-            // 点积公式: a·b = |a||b|cosθ. 归一化后 |a||b|=1.
-            const dot = Math.max(-1, Math.min(1, vec.dot(n1, n2))); 
-            const angleRad = Math.acos(dot);
-            return angleRad * (180 / Math.PI); // 转为角度
-        };
-
-        // 食指 (Index) 5, 6, 8 (MCP -> PIP -> TIP)
-        // 注意：MediaPipe 手指有 4 个点。简单起见，对比 5->6 和 6->8 的方向，
-        // 或者对比 0->5 (掌骨) 和 5->8 (手指整体) 的方向。
-        // 这里使用更鲁棒的：掌心到指根(0->MCP) vs 指根到指尖(MCP->TIP)
+        // === 核心算法优化 v2.1 ===
+        
+        // 1. 手指伸直判定 (更宽松的阈值)
         const isFingerStraight = (mcpIdx, tipIdx) => {
             const palmToMcp = vec.sub(landmarks[mcpIdx], wrist);
             const mcpToTip = vec.sub(landmarks[tipIdx], landmarks[mcpIdx]);
-            // 如果两个向量方向一致，点积接近 1
+            // 降低阈值到 0.35 (约 70度夹角)，解决右手垂直指向时 Z 轴压缩导致的问题
             const dot = vec.dot(vec.normalize(palmToMcp), vec.normalize(mcpToTip));
-            return dot > 0.5; // 宽松判定：夹角小于 60 度都算直
+            return dot > 0.35; 
         };
 
         const isFingerCurled = (mcpIdx, tipIdx) => {
-            // 简单距离判定依然有效且计算量小：指尖距离手腕 比 指根距离手腕 近
             return vec.dist(landmarks[tipIdx], wrist) < vec.dist(landmarks[mcpIdx], wrist);
         };
 
-        // 1. 食指状态 (Index 5-8)
+        // 2. 拇指状态 (关键：用于区分拳头和手枪)
+        // 拇指指尖如果远离食指指根(5号点)，说明是大张开的
+        const thumbOut = vec.dist(landmarks[4], landmarks[5]) > vec.dist(landmarks[3], landmarks[5]);
+
+        // 各指状态
         const indexStraight = isFingerStraight(5, 8);
-        
-        // 2. 其他三指状态 (Middle 9-12, Ring 13-16, Pinky 17-20)
         const middleCurled = isFingerCurled(9, 12);
         const ringCurled = isFingerCurled(13, 16);
         const pinkyCurled = isFingerCurled(17, 20);
@@ -140,18 +125,23 @@ export default class GestureEngine {
         let isGun = false;
         let isFist = false;
 
-        // FIST: 4指全部卷曲
-        if (!indexStraight && middleCurled && ringCurled && pinkyCurled) {
+        // FIST 判定：严格模式
+        // 必须 4指卷曲 且 拇指没有明显张开 (防止手枪误判为拳头)
+        if (!indexStraight && middleCurled && ringCurled && pinkyCurled && !thumbOut) {
             isFist = true;
         }
         
-        // GUN: 食指直 + (中指、无名指、小指 至少2个卷曲，提高鲁棒性)
+        // GUN 判定：宽松模式
+        // 食指直 + (中指、无名指、小指 至少2个卷曲)
         const curledCount = (middleCurled ? 1 : 0) + (ringCurled ? 1 : 0) + (pinkyCurled ? 1 : 0);
         if (indexStraight && curledCount >= 2) {
             isGun = true;
         }
 
-        // 状态机滞后处理
+        // 状态机 (加入优先级锁)
+        // 如果物理特征同时满足 Gun 和 Fist (极少见)，优先判 Gun
+        if (isGun && isFist) isFist = false;
+
         switch (this.lastState) {
             case 'IDLE':
                 if (isGun) this.lastState = 'GUN';
@@ -162,12 +152,12 @@ export default class GestureEngine {
                 else if (!isGun) this.lastState = 'IDLE';
                 break;
             case 'FIST':
-                if (isGun) this.lastState = 'GUN';
+                if (isGun) this.lastState = 'GUN'; // 允许秒切
                 else if (!isFist) this.lastState = 'IDLE';
                 break;
         }
         
-        // RECOIL (射击动作) 鲁棒性优化
+        // RECOIL 检测
         let isRecoil = false;
         if (this.lastState === 'GUN') {
             this.gunStabilityTimer++;
@@ -175,19 +165,17 @@ export default class GestureEngine {
             this.gunStabilityTimer = 0;
         }
         
-        // 必须稳定 5 帧以上才检测后坐力，防止状态切换时的抖动
         if (this.gunStabilityTimer > 5 && !this.isFiring) {
             const indexTipToWristDist = vec.dist(landmarks[8], wrist);
             const radialVelocity = (indexTipToWristDist - this.prevIndexTipToWristDist) / 0.016;
             
-            // 速度阈值 0.5
             if (radialVelocity > 0.5) {
                 isRecoil = true;
                 this.isFiring = true;
                 this.lastFireTime = now;
             }
         }
-        if (now - this.lastFireTime > 0.2) this.isFiring = false; // 射速限制
+        if (now - this.lastFireTime > 0.2) this.isFiring = false;
         
         this.inputState.gesture = isRecoil ? 'RECOIL' : this.lastState;
         this.prevIndexTipToWristDist = vec.dist(landmarks[8], wrist);

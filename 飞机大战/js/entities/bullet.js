@@ -5,20 +5,26 @@ export default class Bullet {
         this.speed = speed;
         this.damage = damage;
         this.type = type;
-        this.angleOffset = angleOffset; // 用于扇形子弹的角度偏移
+        this.angleOffset = angleOffset;
         this.active = true;
         
-        // 根据类型设定样式
+        // 样式配置
         if (type === 'pierce') {
             this.width = 10;
             this.height = 30;
             this.color = '#ff0055';
-            this.isPiercing = true; // 穿透标记
+            this.isPiercing = true;
         } else if (type === 'spread') {
             this.width = 4;
             this.height = 10;
             this.color = '#ffff00';
             this.isPiercing = false;
+        } else if (type === 'bomb') {
+            // v2.1 Update: 虚空导弹
+            this.width = 20; 
+            this.height = 20;
+            this.color = '#9900ff';
+            this.isPiercing = false; // 撞到即炸（未来逻辑）
         } else {
             this.width = 4;
             this.height = 12;
@@ -28,7 +34,6 @@ export default class Bullet {
     }
 
     update(deltaTime) {
-        // 处理角度移动 (扇形弹道)
         if (this.angleOffset !== 0) {
             this.x += Math.sin(this.angleOffset) * this.speed * deltaTime;
             this.y -= Math.cos(this.angleOffset) * this.speed * deltaTime;
@@ -43,21 +48,39 @@ export default class Bullet {
 
     draw(ctx) {
         if (!this.active) return;
-        ctx.fillStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 10;
         
-        // 简单的旋转绘制 (如果有角度)
-        if (this.angleOffset !== 0) {
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.angleOffset);
-            ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
-            ctx.restore();
-        } else {
-            ctx.fillRect(this.x - this.width / 2, this.y, this.width, this.height);
+        if (this.type === 'bomb') {
+            // 虚空导弹特效：紫色脉冲球
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = this.color;
+            
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.width/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 核心亮点
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.width/4, 0, Math.PI * 2);
+            ctx.fill();
+        } 
+        else {
+            // 普通子弹绘制
+            ctx.fillStyle = this.color;
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 10;
+            
+            if (this.angleOffset !== 0) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angleOffset);
+                ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                ctx.restore();
+            } else {
+                ctx.fillRect(this.x - this.width / 2, this.y, this.width, this.height);
+            }
         }
-        
         ctx.shadowBlur = 0;
     }
 }
