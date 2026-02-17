@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>飞机大战 - 手势控制 MVP</title>
     <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-    <!-- 容器 A: 开始界面 (默认显示) -->
     <div id="start-screen" class="screen">
         <div id="account-icon">👤</div>
         
@@ -16,55 +16,62 @@
             <h1 class="game-title">飞机大战</h1>
             <p class="subtitle">手势控制版</p>
         </div>
+        
+        <div class="plane-selector">
+            <p style="color:#00d4ff; margin-bottom:10px;">当前机型: <span id="selected-plane-name">游骑兵</span></p>
+        </div>
+
         <div class="menu-container">
             <button id="start-btn" class="menu-btn">开始游戏</button>
         </div>
 
-        <!-- 开发者/账户登录模态框 -->
         <div id="dev-modal" class="modal screen hidden">
-            <div class="menu-container" style="background: rgba(20, 20, 40, 0.95); padding: 30px; border-radius: 15px; border: 1px solid #00d4ff; box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);">
-                <h2 style="color: #00d4ff; text-align: center; margin-bottom: 20px;">开发者登录</h2>
-                <div style="margin-bottom: 15px;">
-                    <label style="color: #fff; display: block; margin-bottom: 5px;">账号</label>
-                    <input type="text" id="login-account" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.5); border: 1px solid #555; color: #fff; border-radius: 5px;">
+            <div class="modal-content">
+                <h2 class="modal-title">开发者登录</h2>
+                <div class="input-group">
+                    <label>账号</label>
+                    <input type="text" id="login-account">
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="color: #fff; display: block; margin-bottom: 5px;">密码</label>
-                    <input type="password" id="login-password" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.5); border: 1px solid #555; color: #fff; border-radius: 5px;">
+                <div class="input-group">
+                    <label>密码</label>
+                    <input type="password" id="login-password">
                 </div>
-                <button id="login-submit-btn" class="menu-btn" style="width: 100%;">登录</button>
-                <button id="dev-modal-close-btn" class="menu-btn secondary" style="width: 100%; margin-top: 10px;">关闭</button>
+                <button id="login-submit-btn" class="menu-btn">登录</button>
+                <button id="dev-modal-close-btn" class="menu-btn secondary" style="margin-top: 10px;">关闭</button>
             </div>
         </div>
     </div>
 
-    <!-- 容器 B: 游戏界面 (默认隐藏) -->
     <div id="game-container" style="display: none;">
         <canvas id="gameCanvas"></canvas>
-        <canvas id="debugCanvas"></canvas> <!-- 用于调试手势 -->
+        <canvas id="debugCanvas"></canvas> 
         <button id="pause-btn">⏸️</button>
 
-        <!-- 其他游戏 UI (暂停菜单, HUD 等) -->
         <div id="pause-screen" class="screen hidden">
              <div class="pause-content">
                 <h2>游戏暂停</h2>
-                <button id="resume-btn" class="menu-btn">继续游戏</button>
-                <button id="restart-btn-pause" class="menu-btn secondary">重新开始</button>
-                <button id="menu-btn-pause" class="menu-btn secondary">返回主菜单</button>
+                <div class="pause-buttons">
+                    <button id="resume-btn" class="menu-btn">继续游戏</button>
+                    <button id="restart-btn-pause" class="menu-btn secondary">重新开始</button>
+                    <button id="menu-btn-pause" class="menu-btn secondary">返回主菜单</button>
+                </div>
             </div>
         </div>
+
          <div id="hud" class="hidden">
             <div class="hud-left">
-                <div class="hud-item"><span class="hud-label">分数</span><span id="score" class="hud-value">0</span></div>
+                <div class="hud-item"><span class="hud-label">SCORE</span><span id="score" class="hud-value">0</span></div>
             </div>
             <div class="hud-right">
                 <div class="hud-item">
-                    <span class="hud-label">生命</span>
+                    <span class="hud-label">HP</span>
                     <div id="health-bar" class="health-bar"><div id="health-fill" class="health-fill"></div></div>
                 </div>
                  <div class="hud-item">
-                    <span class="hud-label">护盾</span>
-                    <span id="shield-count" class="hud-value">🛡️ x 0</span>
+                    <div id="shield-icon-container">
+                        <span class="hud-label">SHIELD</span>
+                        <span id="shield-count" class="hud-value" style="color: #00d4ff;">🛡️ x 3</span>
+                    </div>
                 </div>
             </div>
         </div>
