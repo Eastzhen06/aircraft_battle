@@ -33,7 +33,7 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v2.1...");
+        console.log("Initializing game v2.4 (2D Topology)...");
         this.setupEventListeners();
         window.addEventListener('resize', () => this.resize());
         this.resize(); 
@@ -140,7 +140,6 @@ class Game {
             const py = this.player.y - this.player.height / 2;
             
             if (bType === 'straight') {
-                // v2.1 Update: 双排直射
                 this.bullets.push(new Bullet(px - 10, py, 800, 10, 'straight'));
                 this.bullets.push(new Bullet(px + 10, py, 800, 10, 'straight'));
             } 
@@ -150,11 +149,10 @@ class Game {
                 this.bullets.push(new Bullet(px, py, 800, 6, 'spread', 0.2));
             }
             else if (bType === 'pierce') {
-                 this.bullets.push(new Bullet(px, py, 600, 25, 'pierce')); // 攻25
+                 this.bullets.push(new Bullet(px, py, 600, 25, 'pierce'));
             }
             else if (bType === 'bomb') {
-                // v2.1 Update: 慢速高伤AOE
-                 this.bullets.push(new Bullet(px, py, 200, 40, 'bomb')); // 速200, 攻40
+                 this.bullets.push(new Bullet(px, py, 200, 40, 'bomb'));
             }
         }
 

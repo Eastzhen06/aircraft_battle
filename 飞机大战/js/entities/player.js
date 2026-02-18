@@ -1,7 +1,7 @@
 const LERP_FACTOR = 0.15;
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-// === 机型配置表 v2.1 ===
+// === 机型配置表 v2.4 ===
 export const PLANE_TYPES = {
     'Ranger': { speed: 1.0, hp: 100, shield: 3, bulletType: 'straight', asset: 'Ranger' },
     'Interceptor': { speed: 1.5, hp: 80, shield: 2, bulletType: 'spread', asset: 'Interceptor' },
@@ -88,8 +88,9 @@ export default class Player {
 
     draw(ctx) {
         if (this.isShieldActive) {
-            // v2.2 Update: 缩小护盾半径 (0.75 -> 0.65)
-            const shieldRadius = Math.max(this.width, this.height) * 0.65;
+            // v2.4 最终修正：护盾半径设为 0.55 (原 0.65)
+            // 解决 "气泡过大" 问题
+            const shieldRadius = Math.max(this.width, this.height) * 0.55;
             
             const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
             ctx.fillStyle = `rgba(0, 180, 255, ${alpha})`;
