@@ -1,5 +1,5 @@
 // js/engine/gestureWorker.js
-// v3.5.93: 置信度调优与透视检测传输
+// v3.5.94: 严谨置信度回归与透视检测传输
 
 let handLandmarker = null;
 
@@ -15,9 +15,9 @@ async function initModel() {
             },
             runningMode: "VIDEO",
             numHands: 1,
-            // [解法 C] 降低置信度阈值，允许 AI 在快速移动或姿势畸变时"连蒙带猜"，增强鲁棒性
-            minHandDetectionConfidence: 0.3,
-            minHandPresenceConfidence: 0.3
+            // [v3.5.94 核心回调] 恢复至 0.5 的安全线，拒绝输出严重畸变的幻觉坐标
+            minHandDetectionConfidence: 0.5,
+            minHandPresenceConfidence: 0.5
         });
         
         postMessage({ type: 'INIT_DONE' });

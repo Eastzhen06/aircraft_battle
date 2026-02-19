@@ -9,7 +9,7 @@ export default class GestureEngine {
         
         this.inputState = { x: window.innerWidth / 2, y: window.innerHeight * 0.8, isDetected: false, gesture: 'IDLE' };
         this.latestLandmarks = null; 
-        this.fingerStates = [false, false, false, false, false]; // 保存手指状态检测
+        this.fingerStates = [false, false, false, false, false]; 
         
         this.debugCanvas = null;
         this.debugCtx = null;
@@ -28,7 +28,7 @@ export default class GestureEngine {
         this.gameCanvas = gameCanvas;
         this.drawingUtils = new DrawingUtils(this.debugCtx);
 
-        console.log("v3.5.93: Advanced Lerp & X-Ray Debugger loaded.");
+        console.log("v3.5.94: 320x240 Ratio Fix & Deadzone EMA loaded.");
         this.startWebcam();
     }
 
@@ -53,7 +53,6 @@ export default class GestureEngine {
     }
 
     startWebcam() {
-        // [解法 B] 强制索要硬件级 60FPS
         navigator.mediaDevices.getUserMedia({ 
             video: { width: 640, height: 480, frameRate: { ideal: 60 } }, 
             audio: false 
@@ -82,8 +81,8 @@ export default class GestureEngine {
 
         if (this.workerReady && !this.isProcessing) {
             this.isProcessing = true;
-            // [解法 A] 底层图像强降维：只取 256x256 交给 AI，彻底抹平 13.9ms 性能毛刺
-            createImageBitmap(this.video, { resizeWidth: 256, resizeHeight: 256, resizeQuality: 'low' })
+            // [v3.5.94 核心] 4:3 完美等比缩放至 320x240。既避免了畸变，也把 CPU 计算量砍到了最低。
+            createImageBitmap(this.video, { resizeWidth: 320, resizeHeight: 240, resizeQuality: 'low' })
                 .then(imageBitmap => {
                     this.worker.postMessage({
                         type: 'PROCESS_FRAME',
@@ -97,14 +96,13 @@ export default class GestureEngine {
     }
 
     detectLoop() {
-        // ... (兼容旧版代码省略详细展开，维持与 onNewFrame 相同的 createImageBitmap 降维处理)
         if (!this.webcamRunning) return;
         window.requestAnimationFrame(() => this.detectLoop());
         this.drawDebugPreview();
         if (window.gameInstance && window.gameInstance.state !== 'PLAYING') return;
         if (this.workerReady && !this.isProcessing && this.video.readyState >= 2) {
             this.isProcessing = true;
-            createImageBitmap(this.video, { resizeWidth: 256, resizeHeight: 256, resizeQuality: 'low' })
+            createImageBitmap(this.video, { resizeWidth: 320, resizeHeight: 240, resizeQuality: 'low' })
                 .then(imageBitmap => {
                     this.worker.postMessage({ type: 'PROCESS_FRAME', image: imageBitmap, timestamp: performance.now() }, [imageBitmap]); 
                 }).catch(err => { this.isProcessing = false; });
@@ -130,7 +128,6 @@ export default class GestureEngine {
         }
         ctx.restore();
 
-        // 【检测装置：底层逻辑可视化展示】
         ctx.font = '14px Orbitron, sans-serif';
         const labels = ['T(拇)', 'I(食)', 'M(中)', 'R(无)', 'P(小)'];
         for (let i = 0; i < 5; i++) {

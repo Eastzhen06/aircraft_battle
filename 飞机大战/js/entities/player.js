@@ -1,4 +1,4 @@
-const LERP_FACTOR = 0.25; // 提高平滑度响应
+const LERP_FACTOR = 0.25; 
 function lerp(a, b, t) { return a + (b - a) * t; }
 
 export const PLANE_TYPES = {
@@ -23,14 +23,13 @@ export default class Player {
         this.x = x;
         this.y = y;
         
-        // --- 物理预测系统变量 (Predictive Lerp) ---
+        // --- 物理预测系统变量 (EMA) ---
         this.targetX = x;
         this.targetY = y;
-        this.vx = 0; // 手部 X 轴滑动速度
-        this.vy = 0; // 手部 Y 轴滑动速度
+        this.vx = 0; 
+        this.vy = 0; 
         this.lastInputX = x;
         this.lastInputY = y;
-        // ----------------------------------------
         
         this.config = config;
         this.maxHp = config.hp;
@@ -52,28 +51,36 @@ export default class Player {
     }
 
     update(input, deltaTime, canvas, skillSystem) {
-        // --- 高级平滑算法：带有动量预测的 Lerp ---
+        // --- v3.5.94 高级平滑算法：死区 Deadzone + 低通滤波 EMA ---
         if (input.isDetected) {
-            // 当 AI 传回全新的坐标时 (说明发生了一次 Worker 推送)
             if (input.x !== this.lastInputX || input.y !== this.lastInputY) {
-                // 计算手部真实的物理滑动速度
-                this.vx = (input.x - this.lastInputX) / deltaTime;
-                this.vy = (input.y - this.lastInputY) / deltaTime;
+                const dx = input.x - this.lastInputX;
+                const dy = input.y - this.lastInputY;
                 
-                // 设置新的锚点
-                this.targetX = input.x;
-                this.targetY = input.y;
+                // 【死区过滤】：如果位移大于 5 像素，才认为是真实意图的移动
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    this.targetX = input.x;
+                    this.targetY = input.y;
+                    
+                    // 【EMA 滤波】：平滑手部速度，过滤瞬间的数据尖刺
+                    this.vx = this.vx * 0.5 + (dx / deltaTime) * 0.5;
+                    this.vy = this.vy * 0.5 + (dy / deltaTime) * 0.5;
+                } else {
+                    // 死区内微颤：不改变目标位置，但迅速衰减滑行速度 (刹车)
+                    this.vx *= 0.5;
+                    this.vy *= 0.5;
+                }
+                
                 this.lastInputX = input.x;
                 this.lastInputY = input.y;
             } else {
-                // 空窗期补偿：如果 AI 没传新数据（因为游戏60帧，AI 30帧）
-                // 战机会依据刚刚计算出的速度，在物理惯性下继续滑行一点点，绝不卡顿
+                // 【空窗期补偿】：AI 没传新数据时，依据平滑后的速度进行微量物理滑行
                 this.targetX += this.vx * deltaTime;
                 this.targetY += this.vy * deltaTime;
                 
-                // 施加阻尼(Damping)，防止过度漂移
-                this.vx *= 0.85;
-                this.vy *= 0.85;
+                // 施加阻尼(Damping)，手停下时战机平稳刹车，不会滑飞
+                this.vx *= 0.8;
+                this.vy *= 0.8;
             }
 
             // 执行最终的柔和追击
@@ -88,7 +95,6 @@ export default class Player {
         this.x = Math.max(this.width / 2, Math.min(this.x, canvas.width - this.width / 2));
         this.y = Math.max(this.height / 2, Math.min(this.y, canvas.height - this.height / 2));
 
-        // ... 以下维持您原有的射击与生命周期逻辑，一字未改 ...
         let shouldShoot = false;
         
         if (this.isBlinking) {
