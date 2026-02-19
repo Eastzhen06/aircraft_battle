@@ -5,21 +5,20 @@ export default class GestureEngine {
         this.video = null;
         this.webcamRunning = false;
         
-        // 多线程控制状态
         this.workerReady = false;
-        this.isProcessing = false; // 锁机制：防止 Worker 算不过来导致消息积压卡死内存
+        this.isProcessing = false; 
         
-        this.lastDetectTime = 0;
-        this.detectInterval = 1000 / 30; 
-
         this.inputState = { x: window.innerWidth / 2, y: window.innerHeight * 0.8, isDetected: false, gesture: 'IDLE' };
+        this.latestLandmarks = null; // 用于平滑渲染
+        
         this.debugCanvas = null;
         this.debugCtx = null;
         this.gameCanvas = null;
         this.drawingUtils = null;
 
-        // v3.5.9 初始化独立线程引擎 (采用 Module 模式加载)
-        this.worker = new Worker('./js/engine/gestureWorker.js', { type: 'module' });
+        // 【核心修复 1】去除 { type: 'module' }，并使用相对 URL 防止路径报错
+        const workerUrl = new URL('./gestureWorker.js', import.meta.url);
+        this.worker = new Worker(workerUrl);
         this.worker.onmessage = this.handleWorkerMessage.bind(this);
     }
 
@@ -30,18 +29,28 @@ export default class GestureEngine {
         this.gameCanvas = gameCanvas;
         this.drawingUtils = new DrawingUtils(this.debugCtx);
 
-        console.log("v3.5.9: Gesture Engine spawning Web Worker...");
+        console.log("v3.5.9: Booting Web Worker & Hardware Sync (Plan C)...");
         this.startWebcam();
     }
 
-    // 接收后台线程传回的数据
     handleWorkerMessage(e) {
         if (e.data.type === 'INIT_DONE') {
-            console.log("v3.5.9: AI Web Worker is ONLINE and READY!");
+            console.log("✅ v3.5.9: AI Worker 成功启动！");
             this.workerReady = true;
         } else if (e.data.type === 'RESULT') {
-            this.isProcessing = false; // 解开线程锁
-            this.updateStateAndDebugCanvas(e.data);
+            this.isProcessing = false; 
+            
+            // 仅仅更新状态，不在这里画图
+            this.inputState.isDetected = e.data.isDetected;
+            this.inputState.gesture = e.data.gesture;
+            this.latestLandmarks = e.data.landmarks;
+
+            if (e.data.isDetected && e.data.landmarks) {
+                const mappedX = (1 - e.data.landmarks[9].x) * this.gameCanvas.width;
+                const mappedY = e.data.landmarks[9].y * this.gameCanvas.height;
+                this.inputState.x = mappedX;
+                this.inputState.y = mappedY;
+            }
         }
     }
 
@@ -51,51 +60,67 @@ export default class GestureEngine {
                 this.video.srcObject = stream;
                 this.video.play();
                 this.webcamRunning = true;
-                this.video.addEventListener("loadeddata", () => this.detectLoop());
+                
+                // 【核心修复 2 - 方案 C】检测是否支持硬件级视频帧同步
+                if ('requestVideoFrameCallback' in this.video) {
+                    this.video.requestVideoFrameCallback(this.onNewFrame.bind(this));
+                } else {
+                    console.warn("浏览器不支持 requestVideoFrameCallback，降级回 requestAnimationFrame");
+                    this.video.addEventListener("loadeddata", () => this.detectLoop());
+                }
             })
             .catch(err => {
                 console.error("Camera access denied or unavailable: ", err);
             });
     }
 
-    detectLoop() {
-        if (!this.webcamRunning || !this.workerReady) return;
-
-        // 状态休眠锁
-        if (window.gameInstance && window.gameInstance.state !== 'PLAYING') {
-            window.requestAnimationFrame(() => this.detectLoop());
-            return;
-        }
-
-        const now = performance.now();
+    // 硬件级同步：物理摄像头吐出新画面时才触发
+    onNewFrame(now, metadata) {
+        if (!this.webcamRunning) return;
         
-        // 频率控制 + 线程积压锁 (!this.isProcessing)
-        if (now - this.lastDetectTime >= this.detectInterval && !this.isProcessing) {
-            this.lastDetectTime = now;
-            if (this.video.readyState >= 2) {
-                this.isProcessing = true;
-                
-                // 零拷贝抓取视频帧：直接扔给显存/内存底层处理，极速生成位图
-                createImageBitmap(this.video).then(imageBitmap => {
-                    // postMessage 的第二个参数 [imageBitmap] 是 "Transferable" 转移所有权，耗时接近 0ms
-                    this.worker.postMessage({
-                        type: 'PROCESS_FRAME',
-                        image: imageBitmap,
-                        timestamp: now
-                    }, [imageBitmap]); 
-                }).catch(err => {
-                    console.error("Bitmap extraction failed", err);
-                    this.isProcessing = false;
-                });
-            }
-        }
+        // 1. 立即注册下一帧的回调
+        this.video.requestVideoFrameCallback(this.onNewFrame.bind(this));
         
-        window.requestAnimationFrame(() => this.detectLoop());
+        // 2. 永远保持摄像头预览画面的渲染 (就算在菜单界面也能看见自己)
+        this.drawDebugPreview();
+
+        // 3. 【状态锁】未开始游戏时，绝对不派发任务给 AI
+        if (window.gameInstance && window.gameInstance.state !== 'PLAYING') return;
+
+        // 4. 只有当 Worker 空闲时才派发运算，避免积压卡死内存
+        if (this.workerReady && !this.isProcessing) {
+            this.isProcessing = true;
+            createImageBitmap(this.video).then(imageBitmap => {
+                this.worker.postMessage({
+                    type: 'PROCESS_FRAME',
+                    image: imageBitmap,
+                    timestamp: metadata.expectedDisplayTime
+                }, [imageBitmap]); 
+            }).catch(err => {
+                console.error("提取位图失败", err);
+                this.isProcessing = false;
+            });
+        }
     }
 
-    // 仅负责 UI 更新与坐标映射
-    updateStateAndDebugCanvas(data) {
-        const { isDetected, gesture, landmarks } = data;
+    // 降级兼容：老版本浏览器使用
+    detectLoop() {
+        if (!this.webcamRunning) return;
+        window.requestAnimationFrame(() => this.detectLoop());
+        
+        this.drawDebugPreview();
+
+        if (window.gameInstance && window.gameInstance.state !== 'PLAYING') return;
+
+        if (this.workerReady && !this.isProcessing && this.video.readyState >= 2) {
+            this.isProcessing = true;
+            createImageBitmap(this.video).then(imageBitmap => {
+                this.worker.postMessage({ type: 'PROCESS_FRAME', image: imageBitmap, timestamp: performance.now() }, [imageBitmap]); 
+            }).catch(err => { this.isProcessing = false; });
+        }
+    }
+
+    drawDebugPreview() {
         const ctx = this.debugCtx;
         const canvas = this.debugCanvas;
         
@@ -104,26 +129,15 @@ export default class GestureEngine {
         ctx.scale(-1, 1);
         ctx.translate(-canvas.width, 0);
 
+        // 画视频底底图
         if (this.video.readyState >= 2) {
             ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
         }
 
-        if (isDetected && landmarks) {
-            this.drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
-            this.drawingUtils.drawLandmarks(landmarks, { color: "#FF0000", radius: 3 });
-
-            const mappedX = (1 - landmarks[9].x) * this.gameCanvas.width;
-            const mappedY = landmarks[9].y * this.gameCanvas.height;
-            
-            this.inputState = {
-                x: mappedX,
-                y: mappedY,
-                isDetected: true,
-                gesture: gesture
-            };
-        } else {
-            this.inputState.isDetected = false;
-            this.inputState.gesture = 'IDLE';
+        // 画最新骨架
+        if (this.inputState.isDetected && this.latestLandmarks) {
+            this.drawingUtils.drawConnectors(this.latestLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
+            this.drawingUtils.drawLandmarks(this.latestLandmarks, { color: "#FF0000", radius: 3 });
         }
         
         ctx.restore();
