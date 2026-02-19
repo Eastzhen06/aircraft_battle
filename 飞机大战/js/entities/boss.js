@@ -3,18 +3,18 @@ export default class Boss {
         this.active = true;
         this.type = 'boss';
         
-        // 映射 1~9 号 Boss (关卡 2 开始出 b1，以此类推)
         this.bossIndex = Math.min(9, Math.max(1, level - 1));
         this.imageKey = 'b' + this.bossIndex;
         
         this.width = 180;
         this.height = 140;
+        this.scoreValue = 5000 * level; // V3.4 新增高额积分
         
         const powerLevel = Math.max(0, level - 2); 
         let baseMultiplier = 1.0;
-        if (this.bossIndex === 3) baseMultiplier = 1.5; // Fortress 血厚
-        if (this.bossIndex === 1) baseMultiplier = 0.8; // Scouter 血薄
-        if (this.bossIndex === 9) baseMultiplier = 2.5; // Emperor 终极血量
+        if (this.bossIndex === 3) baseMultiplier = 1.5; 
+        if (this.bossIndex === 1) baseMultiplier = 0.8; 
+        if (this.bossIndex === 9) baseMultiplier = 2.5; 
         
         this.maxHealth = 2800 * Math.pow(1.2, powerLevel) * baseMultiplier;
         this.health = this.maxHealth;
@@ -40,7 +40,6 @@ export default class Boss {
         
         if (this.entering) {
             this.y += 100 * deltaTime;
-            // v3.3: 允许入场时直接射击，增加压迫感
             this.attackTimer += deltaTime; 
             if (this.y >= 150) {
                 this.y = 150;
@@ -51,18 +50,14 @@ export default class Boss {
             this.moveTimer += deltaTime;
             this.attackTimer += deltaTime;
             
-            // 行为树：基于不同 Boss 的移动特性
             if (this.bossIndex === 4 && this.moveTimer > 3.0) {
-                // 暗影 (Umbra): 瞬移
                 this.x = Math.random() * (playArea.maxX - playArea.minX - this.width) + playArea.minX + this.width/2;
                 this.moveTimer = 0;
             } else if (this.bossIndex === 2 && this.moveTimer > 4.0) {
-                // 突击者 (Raider): 向玩家方向突刺一下
                 this.y += 200 * deltaTime;
                 if(this.y > 300) this.moveTimer = 0;
             } else {
-                // 常规游走
-                if (this.y > 150) this.y -= 50 * deltaTime; // Raider归位
+                if (this.y > 150) this.y -= 50 * deltaTime; 
                 if (this.moveTimer > 2.0) {
                     this.moveTimer = 0;
                     const safeMinX = playArea.minX + this.width / 2 + 20;
@@ -77,7 +72,6 @@ export default class Boss {
             }
         }
         
-        // 强制钳制在安全边界内
         this.x = Math.max(playArea.minX + this.width/2, Math.min(this.x, playArea.maxX - this.width/2));
         
         const healthPercent = this.health / this.maxHealth;
@@ -97,17 +91,16 @@ export default class Boss {
     }
     
     shoot(game) {
-        // 根据 Boss 编号施放专属绝技
         switch(this.bossIndex) {
-            case 1: this.shootSpread(game, 5); break; // Scouter
-            case 2: this.shootLaser(game, false); break; // Raider (直射)
-            case 3: this.shootCircle(game, 12); break; // Fortress
-            case 4: this.shootSpiral(game, 4); break; // Umbra
-            case 5: this.shootSpread(game, 9); break; // Storm
-            case 6: this.shootSpiral(game, 8); break; // Eddy
-            case 7: this.shootLaser(game, true); break; // Adjudicator (真激光)
-            case 8: this.shootCircle(game, 20); this.shootSpiral(game, 4); break; // Doomsday
-            case 9: // Emperor
+            case 1: this.shootSpread(game, 5); break; 
+            case 2: this.shootLaser(game, false); break; 
+            case 3: this.shootCircle(game, 12); break; 
+            case 4: this.shootSpiral(game, 4); break; 
+            case 5: this.shootSpread(game, 9); break; 
+            case 6: this.shootSpiral(game, 8); break; 
+            case 7: this.shootLaser(game, true); break; 
+            case 8: this.shootCircle(game, 20); this.shootSpiral(game, 4); break; 
+            case 9: 
                 let r = Math.random();
                 if(r < 0.3) this.shootCircle(game, 24);
                 else if (r < 0.6) this.shootLaser(game, true);
@@ -151,7 +144,7 @@ export default class Boss {
     }
     
     takeDamage(damage) {
-        if (this.entering) return false; // 入场无敌
+        if (this.entering) return false; 
         this.health -= damage;
         if (this.health <= 0) {
             this.active = false;
@@ -171,7 +164,6 @@ export default class Boss {
             ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         }
         
-        // Boss 血条
         const healthPercent = this.health / this.maxHealth;
         const barWidth = this.width;
         const barHeight = 8;

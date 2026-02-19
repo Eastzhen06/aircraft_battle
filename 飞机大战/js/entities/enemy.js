@@ -8,6 +8,7 @@ export default class Enemy {
         this.speed = 100;
         this.health = 10;
         this.maxHealth = 10;
+        this.scoreValue = 100; // V3.4 新增积分权重
         
         this.movePattern = 'straight';
         this.moveTimer = 0;
@@ -25,7 +26,7 @@ export default class Enemy {
         this.originalX = x;
         this.moveTimer = 0;
         this.angle = 0;
-        this.shootTimer = Math.random() * 1.5; // 出生后 0~1.5秒内必开火
+        this.shootTimer = Math.random() * 1.5; 
 
         const rand = Math.random();
         if (rand < 0.6) {
@@ -33,16 +34,19 @@ export default class Enemy {
             this.width = 40; this.height = 40;
             this.maxHealth = 10 * level;
             this.speed = 150 + level * 10;
+            this.scoreValue = 100;
         } else if (rand < 0.9) {
             this.type = 2; this.imageKey = 'e2';
             this.width = 60; this.height = 60;
             this.maxHealth = 30 * level;
             this.speed = 100 + level * 5;
+            this.scoreValue = 300;
         } else {
             this.type = 3; this.imageKey = 'e3';
             this.width = 90; this.height = 90;
             this.maxHealth = 80 * level;
             this.speed = 70 + level * 2;
+            this.scoreValue = 800;
         }
         this.health = this.maxHealth;
 
@@ -72,7 +76,6 @@ export default class Enemy {
             case 'diagonal': this.y += this.speed * 0.8 * deltaTime; this.x += Math.sin(this.angle) * 1.5; break;
         }
         
-        // 强制边界
         if (playArea) {
             this.x = Math.max(playArea.minX + this.width / 2, Math.min(this.x, playArea.maxX - this.width / 2));
         }
@@ -81,7 +84,6 @@ export default class Enemy {
             this.active = false;
         }
 
-        // 敌机开火逻辑
         this.shootTimer -= deltaTime;
         if (this.shootTimer <= 0 && this.y > 0) {
             if (this.type === 1) {
@@ -103,18 +105,15 @@ export default class Enemy {
     draw(ctx) {
         if (!this.active) return;
 
-        // 获取全局图片
         const img = window.imageLoader ? window.imageLoader.get(this.imageKey) : null;
         
         if (img) {
             ctx.drawImage(img, this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         } else {
-            // 极简 Fallback 防止崩溃
             ctx.fillStyle = 'red';
             ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         }
 
-        // 血条
         if (this.type !== 1 && this.health < this.maxHealth) {
             const healthPercent = this.health / this.maxHealth;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
