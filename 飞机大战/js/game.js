@@ -46,7 +46,7 @@ class Game {
 
         this.state = 'MENU';
         this.score = 0; 
-        this.selectedLevel = 1; // 默认选中第1关
+        this.selectedLevel = 1; 
         
         this.lastTime = performance.now();
         this.deltaTime = 0;
@@ -58,7 +58,6 @@ class Game {
         this.skillSystem = new SkillSystem();
         this.levelSystem = new LevelSystem();
 
-        // [修复 6] 彻底隔离的两套独立子弹池
         this.playerBulletPool = new ObjectPool(() => new Bullet(0, 0, 0, 0, 'straight'), 200);
         this.enemyBulletPool = new ObjectPool(() => new Bullet(0, 0, 0, 0, 'enemy'), 200);
         this.enemyPool = new ObjectPool(() => new Enemy(), 60);
@@ -74,8 +73,11 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.5 (Campaign UI & Independent Pools)...");
+        console.log("Initializing game v3.5.8 (Performance Tuned)...");
         window.imageLoader = this.imageLoader;
+        
+        // V3.5.8 关键修改：挂载全局实例，供 gesture.js 读取当前状态进行 AI 休眠
+        window.gameInstance = this;
 
         this.setupEventListeners();
         window.addEventListener('resize', () => this.resize());
@@ -89,7 +91,6 @@ class Game {
         }
     }
 
-    // [修复 7] 选关 UI 生成逻辑
     populateLevelGrid() {
         const grid = document.getElementById('level-grid');
         if (!grid) return;
@@ -125,19 +126,16 @@ class Game {
             this.debugToggleBtn.addEventListener('click', () => this.debugWrapper.classList.toggle('collapsed'));
         }
 
-        // 开始闯关 -> 进入选关画面
         document.getElementById('start-btn').addEventListener('click', () => {
             this.startScreen.style.display = 'none';
             this.campaignScreen.classList.remove('hidden');
         });
 
-        // 选关画面 -> 返回主菜单
         document.getElementById('back-to-menu-btn').addEventListener('click', () => {
             this.campaignScreen.classList.add('hidden');
             this.startScreen.style.display = 'flex';
         });
 
-        // 出击 -> 正式开始游戏
         document.getElementById('launch-level-btn').addEventListener('click', () => {
             this.campaignScreen.classList.add('hidden');
             this.startGame(this.selectedLevel);
@@ -191,7 +189,7 @@ class Game {
         this.boss = null;
         
         this.levelSystem = new LevelSystem();
-        this.levelSystem.level = startLevel; // 注入选择的关卡
+        this.levelSystem.level = startLevel; 
         this.skillSystem.init(); 
 
         const video = document.createElement('video');
@@ -254,18 +252,15 @@ class Game {
         if (!this.enemyBullets.includes(b)) this.enemyBullets.push(b);
     }
 
-    // 统一处理玩家扣血与掉命逻辑
     handlePlayerDamage(damageAmount) {
-        if (this.player.isInvincible) return; // 护盾或无敌闪烁期间免疫
+        if (this.player.isInvincible) return; 
         
         this.player.hp -= damageAmount;
         if (this.player.hp <= 0) {
             this.player.lives--;
             if (this.player.lives > 0) {
-                // 重生机制
                 this.player.hp = this.player.maxHp;
-                this.player.triggerBlink(); // 触发 3 秒闪烁无敌
-                // 可选: 清空周边弹幕防止防守尸
+                this.player.triggerBlink(); 
                 this.enemyBullets.forEach(b => b.active = false);
             } else {
                 console.log("GAME OVER");
@@ -288,7 +283,7 @@ class Game {
         }
 
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
-        if (shouldShoot && !this.player.isBlinking) { // 刚复活时暂时不能射击
+        if (shouldShoot && !this.player.isBlinking) { 
             const px = this.player.x; const py = this.player.y - this.player.height / 2;
             const bType = this.player.bulletType;
             if (bType === 'straight') { this.spawnBullet(px-10, py, 800, 10, 'straight'); this.spawnBullet(px+10, py, 800, 10, 'straight'); } 
@@ -299,13 +294,11 @@ class Game {
 
         const isOutOfBounds = (x) => (x < this.playArea.minX || x > this.playArea.maxX);
 
-        // 玩家子弹更新
         this.bullets.forEach(b => {
             b.update(this.deltaTime);
             if (b.active && isOutOfBounds(b.x)) b.active = false;
         });
 
-        // 敌方子弹更新
         const hitZoneX = this.player.width * 0.4;
         const hitZoneY = this.player.height * 0.4;
         this.enemyBullets.forEach(b => {
@@ -318,11 +311,9 @@ class Game {
             }
         });
 
-        // 敌机更新与交叉碰撞
         this.enemies.forEach(e => {
             e.update(this.deltaTime, this.canvas.height, this.playArea, this);
             if (e.active) {
-                // [修复 2] AABB 放宽碰撞补偿 (子弹半径 + 敌机半径)
                 this.bullets.forEach(b => {
                     if (b.active && b.state === 'FLYING' && Math.abs(b.x - e.x) < (e.width/2 + b.width/2) && Math.abs(b.y - e.y) < (e.height/2 + b.height/2)) {
                         const killed = e.takeDamage(b.damage);
@@ -331,13 +322,11 @@ class Game {
                     }
                 });
 
-                // [修复 5] 玩家撞击小怪物理矩阵
                 if (Math.abs(e.x - this.player.x) < (e.width/2 + this.player.width/2 * 0.8) && 
                     Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
                     
-                    e.active = false; // 无论如何敌机自爆
+                    e.active = false; 
                     if (!this.player.isInvincible) {
-                        // 根据体型扣除特定血量
                         let crashDamage = 5;
                         if (e.type === 2) crashDamage = 15;
                         if (e.type === 3) crashDamage = 30;
@@ -347,7 +336,6 @@ class Game {
             }
         });
 
-        // Boss 更新
         if (this.boss) {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
             if (this.boss.shouldShoot()) this.boss.shoot(this);
@@ -358,7 +346,6 @@ class Game {
                     if (bossKilled) this.score += this.boss.scoreValue;
                 }
             });
-            // 注意: Boss不与玩家发生物理撞击扣血 (免疫碰撞要求)
         }
         
         if (this.skillSystem.state === 'ACTIVE' && this.skillSystem.activeTimer === this.skillSystem.ultDuration) {
@@ -370,11 +357,10 @@ class Game {
             }
         }
 
-        // 更新 UI
         if(this.shieldCountUI) this.shieldCountUI.textContent = `🛡️ x ${this.player.shieldCount}`;
         if(this.scoreUI) this.scoreUI.textContent = this.score;
         if(this.levelUI) this.levelUI.textContent = this.levelSystem.level;
-        if(this.livesUI) this.livesUI.textContent = `❤️ x ${this.player.lives}`; // 更新命数
+        if(this.livesUI) this.livesUI.textContent = `❤️ x ${this.player.lives}`; 
         
         const hpFill = document.getElementById('health-fill');
         if (hpFill) {
