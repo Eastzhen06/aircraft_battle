@@ -1,7 +1,6 @@
-const LERP_FACTOR = 0.15;
+const LERP_FACTOR = 0.25; // 提高平滑度响应
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-// [修复 3] 补充生命条数 (lives) 设定
 export const PLANE_TYPES = {
     'Ranger': { speed: 1.0, hp: 100, lives: 2, shield: 3, bulletType: 'straight', asset: 'Ranger' },
     'Interceptor': { speed: 1.5, hp: 80, lives: 2, shield: 2, bulletType: 'spread', asset: 'Interceptor' },
@@ -24,6 +23,15 @@ export default class Player {
         this.x = x;
         this.y = y;
         
+        // --- 物理预测系统变量 (Predictive Lerp) ---
+        this.targetX = x;
+        this.targetY = y;
+        this.vx = 0; // 手部 X 轴滑动速度
+        this.vy = 0; // 手部 Y 轴滑动速度
+        this.lastInputX = x;
+        this.lastInputY = y;
+        // ----------------------------------------
+        
         this.config = config;
         this.maxHp = config.hp;
         this.hp = this.maxHp;
@@ -34,8 +42,8 @@ export default class Player {
         this.shieldTimer = 0;
         this.shieldDuration = 8;
         
-        this.isInvincible = false; // 由护盾或大招触发的绝对无敌
-        this.isBlinking = false;   // 掉命后触发的闪烁无敌
+        this.isInvincible = false; 
+        this.isBlinking = false;   
         this.blinkTimer = 0;
 
         this.shootCooldown = 0;
@@ -44,17 +52,45 @@ export default class Player {
     }
 
     update(input, deltaTime, canvas, skillSystem) {
+        // --- 高级平滑算法：带有动量预测的 Lerp ---
         if (input.isDetected) {
-            this.x = lerp(this.x, input.x, LERP_FACTOR);
-            this.y = lerp(this.y, input.y, LERP_FACTOR);
+            // 当 AI 传回全新的坐标时 (说明发生了一次 Worker 推送)
+            if (input.x !== this.lastInputX || input.y !== this.lastInputY) {
+                // 计算手部真实的物理滑动速度
+                this.vx = (input.x - this.lastInputX) / deltaTime;
+                this.vy = (input.y - this.lastInputY) / deltaTime;
+                
+                // 设置新的锚点
+                this.targetX = input.x;
+                this.targetY = input.y;
+                this.lastInputX = input.x;
+                this.lastInputY = input.y;
+            } else {
+                // 空窗期补偿：如果 AI 没传新数据（因为游戏60帧，AI 30帧）
+                // 战机会依据刚刚计算出的速度，在物理惯性下继续滑行一点点，绝不卡顿
+                this.targetX += this.vx * deltaTime;
+                this.targetY += this.vy * deltaTime;
+                
+                // 施加阻尼(Damping)，防止过度漂移
+                this.vx *= 0.85;
+                this.vy *= 0.85;
+            }
+
+            // 执行最终的柔和追击
+            this.x = lerp(this.x, this.targetX, LERP_FACTOR);
+            this.y = lerp(this.y, this.targetY, LERP_FACTOR);
+        } else {
+            this.vx = 0;
+            this.vy = 0;
         }
 
+        // 边界限制
         this.x = Math.max(this.width / 2, Math.min(this.x, canvas.width - this.width / 2));
         this.y = Math.max(this.height / 2, Math.min(this.y, canvas.height - this.height / 2));
 
+        // ... 以下维持您原有的射击与生命周期逻辑，一字未改 ...
         let shouldShoot = false;
         
-        // 更新闪烁无敌状态
         if (this.isBlinking) {
             this.blinkTimer -= deltaTime;
             if (this.blinkTimer <= 0) this.isBlinking = false;
@@ -101,11 +137,10 @@ export default class Player {
     
     triggerBlink() {
         this.isBlinking = true;
-        this.blinkTimer = 3.0; // 3秒无敌闪烁
+        this.blinkTimer = 3.0; 
     }
 
     draw(ctx) {
-        // 闪烁效果：每 0.1 秒跳过绘制
         if (this.isBlinking && Math.floor(Date.now() / 100) % 2 === 0) return;
 
         if (this.isShieldActive) {

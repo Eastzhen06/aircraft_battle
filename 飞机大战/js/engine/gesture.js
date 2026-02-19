@@ -4,19 +4,18 @@ export default class GestureEngine {
     constructor() {
         this.video = null;
         this.webcamRunning = false;
-        
         this.workerReady = false;
         this.isProcessing = false; 
         
         this.inputState = { x: window.innerWidth / 2, y: window.innerHeight * 0.8, isDetected: false, gesture: 'IDLE' };
-        this.latestLandmarks = null; // 用于平滑渲染
+        this.latestLandmarks = null; 
+        this.fingerStates = [false, false, false, false, false]; // 保存手指状态检测
         
         this.debugCanvas = null;
         this.debugCtx = null;
         this.gameCanvas = null;
         this.drawingUtils = null;
 
-        // 【核心修复 1】去除 { type: 'module' }，并使用相对 URL 防止路径报错
         const workerUrl = new URL('./gestureWorker.js', import.meta.url);
         this.worker = new Worker(workerUrl);
         this.worker.onmessage = this.handleWorkerMessage.bind(this);
@@ -29,21 +28,20 @@ export default class GestureEngine {
         this.gameCanvas = gameCanvas;
         this.drawingUtils = new DrawingUtils(this.debugCtx);
 
-        console.log("v3.5.9: Booting Web Worker & Hardware Sync (Plan C)...");
+        console.log("v3.5.93: Advanced Lerp & X-Ray Debugger loaded.");
         this.startWebcam();
     }
 
     handleWorkerMessage(e) {
         if (e.data.type === 'INIT_DONE') {
-            console.log("✅ v3.5.9: AI Worker 成功启动！");
             this.workerReady = true;
         } else if (e.data.type === 'RESULT') {
             this.isProcessing = false; 
             
-            // 仅仅更新状态，不在这里画图
             this.inputState.isDetected = e.data.isDetected;
             this.inputState.gesture = e.data.gesture;
             this.latestLandmarks = e.data.landmarks;
+            this.fingerStates = e.data.fingerStates || [false,false,false,false,false];
 
             if (e.data.isDetected && e.data.landmarks) {
                 const mappedX = (1 - e.data.landmarks[9].x) * this.gameCanvas.width;
@@ -55,68 +53,61 @@ export default class GestureEngine {
     }
 
     startWebcam() {
-        navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
-            .then((stream) => {
-                this.video.srcObject = stream;
-                this.video.play();
-                this.webcamRunning = true;
-                
-                // 【核心修复 2 - 方案 C】检测是否支持硬件级视频帧同步
-                if ('requestVideoFrameCallback' in this.video) {
-                    this.video.requestVideoFrameCallback(this.onNewFrame.bind(this));
-                } else {
-                    console.warn("浏览器不支持 requestVideoFrameCallback，降级回 requestAnimationFrame");
-                    this.video.addEventListener("loadeddata", () => this.detectLoop());
-                }
-            })
-            .catch(err => {
-                console.error("Camera access denied or unavailable: ", err);
-            });
+        // [解法 B] 强制索要硬件级 60FPS
+        navigator.mediaDevices.getUserMedia({ 
+            video: { width: 640, height: 480, frameRate: { ideal: 60 } }, 
+            audio: false 
+        })
+        .then((stream) => {
+            this.video.srcObject = stream;
+            this.video.play();
+            this.webcamRunning = true;
+            
+            if ('requestVideoFrameCallback' in this.video) {
+                this.video.requestVideoFrameCallback(this.onNewFrame.bind(this));
+            } else {
+                this.video.addEventListener("loadeddata", () => this.detectLoop());
+            }
+        })
+        .catch(err => { console.error("Camera error:", err); });
     }
 
-    // 硬件级同步：物理摄像头吐出新画面时才触发
     onNewFrame(now, metadata) {
         if (!this.webcamRunning) return;
-        
-        // 1. 立即注册下一帧的回调
         this.video.requestVideoFrameCallback(this.onNewFrame.bind(this));
         
-        // 2. 永远保持摄像头预览画面的渲染 (就算在菜单界面也能看见自己)
         this.drawDebugPreview();
 
-        // 3. 【状态锁】未开始游戏时，绝对不派发任务给 AI
         if (window.gameInstance && window.gameInstance.state !== 'PLAYING') return;
 
-        // 4. 只有当 Worker 空闲时才派发运算，避免积压卡死内存
         if (this.workerReady && !this.isProcessing) {
             this.isProcessing = true;
-            createImageBitmap(this.video).then(imageBitmap => {
-                this.worker.postMessage({
-                    type: 'PROCESS_FRAME',
-                    image: imageBitmap,
-                    timestamp: metadata.expectedDisplayTime
-                }, [imageBitmap]); 
-            }).catch(err => {
-                console.error("提取位图失败", err);
-                this.isProcessing = false;
-            });
+            // [解法 A] 底层图像强降维：只取 256x256 交给 AI，彻底抹平 13.9ms 性能毛刺
+            createImageBitmap(this.video, { resizeWidth: 256, resizeHeight: 256, resizeQuality: 'low' })
+                .then(imageBitmap => {
+                    this.worker.postMessage({
+                        type: 'PROCESS_FRAME',
+                        image: imageBitmap,
+                        timestamp: metadata.expectedDisplayTime
+                    }, [imageBitmap]); 
+                }).catch(err => {
+                    this.isProcessing = false;
+                });
         }
     }
 
-    // 降级兼容：老版本浏览器使用
     detectLoop() {
+        // ... (兼容旧版代码省略详细展开，维持与 onNewFrame 相同的 createImageBitmap 降维处理)
         if (!this.webcamRunning) return;
         window.requestAnimationFrame(() => this.detectLoop());
-        
         this.drawDebugPreview();
-
         if (window.gameInstance && window.gameInstance.state !== 'PLAYING') return;
-
         if (this.workerReady && !this.isProcessing && this.video.readyState >= 2) {
             this.isProcessing = true;
-            createImageBitmap(this.video).then(imageBitmap => {
-                this.worker.postMessage({ type: 'PROCESS_FRAME', image: imageBitmap, timestamp: performance.now() }, [imageBitmap]); 
-            }).catch(err => { this.isProcessing = false; });
+            createImageBitmap(this.video, { resizeWidth: 256, resizeHeight: 256, resizeQuality: 'low' })
+                .then(imageBitmap => {
+                    this.worker.postMessage({ type: 'PROCESS_FRAME', image: imageBitmap, timestamp: performance.now() }, [imageBitmap]); 
+                }).catch(err => { this.isProcessing = false; });
         }
     }
 
@@ -129,18 +120,25 @@ export default class GestureEngine {
         ctx.scale(-1, 1);
         ctx.translate(-canvas.width, 0);
 
-        // 画视频底底图
         if (this.video.readyState >= 2) {
             ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
         }
 
-        // 画最新骨架
         if (this.inputState.isDetected && this.latestLandmarks) {
             this.drawingUtils.drawConnectors(this.latestLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
             this.drawingUtils.drawLandmarks(this.latestLandmarks, { color: "#FF0000", radius: 3 });
         }
-        
         ctx.restore();
+
+        // 【检测装置：底层逻辑可视化展示】
+        ctx.font = '14px Orbitron, sans-serif';
+        const labels = ['T(拇)', 'I(食)', 'M(中)', 'R(无)', 'P(小)'];
+        for (let i = 0; i < 5; i++) {
+            ctx.fillStyle = this.fingerStates[i] ? '#00FF00' : '#FF0000';
+            ctx.fillText(`${labels[i]}:${this.fingerStates[i]?'UP':'DN'}`, 5, 20 + i * 20);
+        }
+        ctx.fillStyle = '#00D4FF';
+        ctx.fillText(`Gesture: ${this.inputState.gesture}`, 5, 130);
     }
 
     getInputState() {
