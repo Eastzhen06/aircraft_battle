@@ -16,28 +16,25 @@ class Game {
         this.pauseBtn = document.getElementById('pause-btn');
         this.pauseScreen = document.getElementById('pause-screen');
         
-        this.debugCanvas = document.getElementById('debugCanvas');
         this.debugWrapper = document.getElementById('debug-wrapper');
         this.debugToggleBtn = document.getElementById('debug-toggle-btn');
         
         this.shieldCountUI = document.getElementById('shield-count');
-        this.accountIcon = document.getElementById('account-icon');
-        this.devModal = document.getElementById('dev-modal');
-        this.adminPanel = document.getElementById('admin-debug-panel');
-        this.planeNameUI = document.getElementById('selected-plane-name');
-
         this.state = 'MENU';
-        this.lastTime = 0;
+        
+        // 性能监控变量
+        this.lastTime = performance.now();
         this.deltaTime = 0;
+        this.fps = 60;
+        this.frameTime = 0; // 记录 update+render 耗时
 
-        this.imageLoader = new ImageLoader();
+        this.imageLoader = window.imageLoader || new ImageLoader(); 
         this.gestureEngine = new GestureEngine();
         this.skillSystem = new SkillSystem();
         this.levelSystem = new LevelSystem();
 
-        // v3.2: 引入对象池彻底解决 GC 卡顿
-        this.bulletPool = new ObjectPool(() => new Bullet(0, 0, 0, 0, 'straight'), 200);
-        this.enemyPool = new ObjectPool(() => new Enemy(), 50);
+        this.bulletPool = new ObjectPool(() => new Bullet(0, 0, 0, 0, 'straight'), 300);
+        this.enemyPool = new ObjectPool(() => new Enemy(), 60);
 
         this.player = null;
         this.bullets = [];
@@ -46,38 +43,38 @@ class Game {
         this.boss = null;
         this.currentPlaneType = 'Ranger';
         
-        // 核心动态边界
         this.playArea = { minX: 0, maxX: window.innerWidth };
     }
 
     init() {
-        console.log("Initializing game v3.2 (Full ES6 Entity Fusion)...");
+        console.log("Initializing game v3.3 (Visual Boundaries & Perf Monitor)...");
         this.setupEventListeners();
         window.addEventListener('resize', () => this.resize());
         this.resize(); 
-        this.imageLoader.load(ASSET_SOURCES, () => {
-            console.log("Assets loaded. Ready.");
-        });
+        
+        if (this.imageLoader.load) {
+            this.imageLoader.load(ASSET_SOURCES, () => {
+                console.log("Assets loaded. Ready.");
+            });
+        }
     }
 
-    // 严格的 DOM 到 Canvas 的物理边界映射
     updateBoundaries() {
         let minX = 0;
         let maxX = this.canvas.width;
         
         if (this.debugWrapper && !this.debugWrapper.classList.contains('collapsed')) {
             const rect = this.debugWrapper.getBoundingClientRect();
-            minX = rect.right + 20; 
+            minX = rect.right + 15; 
         }
         
         const hud = document.getElementById('hud');
         if (hud) {
             const rect = hud.getBoundingClientRect();
-            maxX = rect.left - 20;
+            maxX = rect.left - 15;
         }
         
         this.playArea = { minX, maxX };
-        console.log(`[Area] Playable X: ${minX} to ${maxX}`);
     }
 
     setupEventListeners() {
@@ -87,33 +84,13 @@ class Game {
                 setTimeout(() => this.updateBoundaries(), 350); 
             });
         }
-
         document.getElementById('start-btn').addEventListener('click', () => this.startGame());
         this.pauseBtn.addEventListener('click', () => this.togglePause());
         document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
-        document.getElementById('restart-btn-pause').addEventListener('click', () => {
-            this.togglePause();
-            this.startGame();
-        });
-        document.getElementById('menu-btn-pause').addEventListener('click', () => location.reload());
-
-        if (this.accountIcon) this.accountIcon.addEventListener('click', () => this.devModal.classList.toggle('hidden'));
-        document.getElementById('dev-modal-close-btn').addEventListener('click', () => this.devModal.classList.add('hidden'));
-
-        const planeBtns = document.querySelectorAll('.plane-btn');
-        planeBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                planeBtns.forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentPlaneType = e.target.dataset.type;
-                const nameMap = { 'Ranger': '游骑兵', 'Interceptor': '拦截者', 'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸' };
-                this.planeNameUI.textContent = nameMap[this.currentPlaneType] || this.currentPlaneType;
-            });
-        });
-
+        
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'e' || e.key === 'E') {
-                if (this.state === 'PLAYING') this.skillSystem.addEnergy(20);
+            if ((e.key === 'e' || e.key === 'E') && this.state === 'PLAYING') {
+                this.skillSystem.addEnergy(20);
             }
         });
     }
@@ -141,12 +118,11 @@ class Game {
         this.levelSystem = new LevelSystem();
         this.skillSystem.init(); 
 
-        if (!this.gestureEngine.webcamRunning) {
-            const video = document.createElement('video');
-            video.style.display = 'none';
-            document.body.appendChild(video);
-            this.gestureEngine.init(video, this.debugCanvas, this.canvas);
-        }
+        const video = document.createElement('video');
+        video.style.display = 'none';
+        document.body.appendChild(video);
+        this.gestureEngine.init(video, document.getElementById('debugCanvas'), this.canvas);
+        
         this.gameLoop(performance.now());
     }
 
@@ -164,14 +140,23 @@ class Game {
 
     gameLoop(currentTime) {
         if (this.state !== 'PLAYING') return;
+        const loopStart = performance.now();
+        
         this.deltaTime = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
+        
+        // 平滑 FPS
+        if (this.deltaTime > 0) {
+            this.fps = this.fps * 0.9 + (1 / this.deltaTime) * 0.1;
+        }
+
         this.update();
         this.render();
+        
+        this.frameTime = performance.now() - loopStart; // 记录本帧总耗时
         requestAnimationFrame((time) => this.gameLoop(time));
     }
 
-    // 玩家子弹
     spawnBullet(x, y, speed, damage, type, offset = 0) {
         const b = this.bulletPool.get();
         b.x = x; b.y = y; b.speed = speed; b.damage = damage; 
@@ -185,10 +170,9 @@ class Game {
         if (!this.bullets.includes(b)) this.bullets.push(b);
     }
 
-    // 敌机/Boss子弹
     spawnEnemyBullet(x, y, speed, damage, angle = 0, isLaser = false) {
         const b = this.bulletPool.get();
-        b.x = x; b.y = y; b.speed = -speed; // 向下飞
+        b.x = x; b.y = y; b.speed = -speed; 
         b.damage = damage; b.type = 'enemy'; b.angleOffset = angle; b.state = 'FLYING'; b.timer = 0;
         b.width = isLaser ? 8 : 6;
         b.height = isLaser ? 25 : 6;
@@ -206,16 +190,17 @@ class Game {
         
         const clampedInput = { ...input };
         if (clampedInput.isDetected) {
-            clampedInput.x = Math.max(this.playArea.minX + this.player.width/2, Math.min(clampedInput.x, this.playArea.maxX - this.player.width/2));
+            // 将玩家限制在互动区内，考虑护盾厚度
+            const safeRadius = this.player.width/2 * 1.5; 
+            clampedInput.x = Math.max(this.playArea.minX + safeRadius, Math.min(clampedInput.x, this.playArea.maxX - safeRadius));
         }
 
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
 
         if (shouldShoot) {
-            const bType = this.player.bulletType;
             const px = this.player.x;
             const py = this.player.y - this.player.height / 2;
-            
+            const bType = this.player.bulletType;
             if (bType === 'straight') {
                 this.spawnBullet(px - 10, py, 800, 10, 'straight');
                 this.spawnBullet(px + 10, py, 800, 10, 'straight');
@@ -230,21 +215,27 @@ class Game {
             }
         }
 
-        this.bullets.forEach(b => b.update(this.deltaTime));
+        // 边界剔除逻辑封装
+        const isOutOfBounds = (x) => (x < this.playArea.minX || x > this.playArea.maxX);
+
+        this.bullets.forEach(b => {
+            b.update(this.deltaTime);
+            if (b.active && isOutOfBounds(b.x)) b.active = false;
+        });
+
         this.enemyBullets.forEach(b => {
             b.update(this.deltaTime);
-            // 简单的敌机子弹打玩家
-            if (b.active && !this.player.isInvincible && Math.abs(b.x - this.player.x) < 15 && Math.abs(b.y - this.player.y) < 15) {
+            if (b.active && isOutOfBounds(b.x)) {
+                b.active = false;
+            } else if (b.active && !this.player.isInvincible && Math.abs(b.x - this.player.x) < 15 && Math.abs(b.y - this.player.y) < 15) {
                 this.player.hp -= b.damage;
                 b.active = false;
-                if (this.player.hp <= 0) {
-                    console.log("GAME OVER"); // 待接入失败结算
-                }
+                if (this.player.hp <= 0) console.log("GAME OVER");
             }
         });
 
         this.enemies.forEach(e => {
-            e.update(this.deltaTime, this.canvas.height, this.playArea);
+            e.update(this.deltaTime, this.canvas.height, this.playArea, this);
             if (e.active) {
                 this.bullets.forEach(b => {
                     if (b.active && b.state === 'FLYING' && Math.abs(b.x - e.x) < e.width/2 && Math.abs(b.y - e.y) < e.height/2) {
@@ -258,6 +249,7 @@ class Game {
 
         if (this.boss) {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
+            if (this.boss.shouldShoot()) this.boss.shoot(this);
             this.bullets.forEach(b => {
                 if (b.active && b.state === 'FLYING' && Math.abs(b.x - this.boss.x) < this.boss.width/2 && Math.abs(b.y - this.boss.y) < this.boss.height/2) {
                     this.boss.takeDamage(b.damage);
@@ -266,7 +258,6 @@ class Game {
             });
         }
         
-        // 必杀技触发全屏秒杀逻辑
         if (this.skillSystem.state === 'ACTIVE' && this.skillSystem.activeTimer === this.skillSystem.ultDuration) {
             this.enemies.forEach(e => e.active = false);
             this.enemyBullets.forEach(b => b.active = false);
@@ -274,8 +265,6 @@ class Game {
         }
 
         if(this.shieldCountUI) this.shieldCountUI.textContent = `🛡️ x ${this.player.shieldCount}`;
-        
-        // 更新血条UI
         const hpFill = document.getElementById('health-fill');
         if (hpFill) {
             const hpPct = Math.max(0, this.player.hp / this.player.config.hp) * 100;
@@ -289,9 +278,21 @@ class Game {
         this.ctx.fillStyle = '#0a0a1a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
+        // 1. 绘制边界分隔线 (V3.3 核心要求)
+        this.ctx.save();
+        this.ctx.setLineDash([5, 15]);
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.playArea.minX, 0); this.ctx.lineTo(this.playArea.minX, this.canvas.height);
+        this.ctx.moveTo(this.playArea.maxX, 0); this.ctx.lineTo(this.playArea.maxX, this.canvas.height);
+        this.ctx.stroke();
+        this.ctx.restore();
+        
+        // 必杀技背景光
         if (this.skillSystem.state === 'ACTIVE') {
             this.ctx.fillStyle = `rgba(255, 0, 85, ${0.1 + Math.random() * 0.1})`;
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.fillRect(this.playArea.minX, 0, this.playArea.maxX - this.playArea.minX, this.canvas.height);
         }
 
         this.enemies.forEach(e => e.draw(this.ctx));
@@ -299,6 +300,31 @@ class Game {
         if (this.player) this.player.draw(this.ctx);
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemyBullets.forEach(b => b.draw(this.ctx));
+        
+        // 2. 绘制右下角性能监控器 (非交互区)
+        this.drawPerformanceMonitor();
+    }
+
+    drawPerformanceMonitor() {
+        const x = this.canvas.width - 150;
+        const y = this.canvas.height - 60;
+        this.ctx.font = '12px Courier New';
+        this.ctx.textAlign = 'left';
+        
+        // FPS 变红警告
+        this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00ff00';
+        this.ctx.fillText(`FPS: ${Math.round(this.fps)}`, x, y);
+        
+        // Frame Time
+        this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00ff00';
+        this.ctx.fillText(`FT:  ${this.frameTime.toFixed(1)}ms`, x, y + 15);
+        
+        // 对象池使用率
+        const bActive = this.bulletPool.pool.filter(o => o.active).length;
+        const eActive = this.enemyPool.pool.filter(o => o.active).length;
+        this.ctx.fillStyle = '#00d4ff';
+        this.ctx.fillText(`Bul: ${bActive}/${this.bulletPool.pool.length}`, x, y + 30);
+        this.ctx.fillText(`Eny: ${eActive}/${this.enemyPool.pool.length}`, x, y + 45);
     }
 }
 
