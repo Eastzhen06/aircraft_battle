@@ -1,12 +1,14 @@
-import { HandLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+import { DrawingUtils, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
 export default class GestureEngine {
     constructor() {
-        this.handLandmarker = null;
         this.video = null;
         this.webcamRunning = false;
         
-        // v3.5.8 性能调优：强制锁死 30 FPS 采样，避免抢夺主线程游戏渲染算力
+        // 多线程控制状态
+        this.workerReady = false;
+        this.isProcessing = false; // 锁机制：防止 Worker 算不过来导致消息积压卡死内存
+        
         this.lastDetectTime = 0;
         this.detectInterval = 1000 / 30; 
 
@@ -15,6 +17,10 @@ export default class GestureEngine {
         this.debugCtx = null;
         this.gameCanvas = null;
         this.drawingUtils = null;
+
+        // v3.5.9 初始化独立线程引擎 (采用 Module 模式加载)
+        this.worker = new Worker('./js/engine/gestureWorker.js', { type: 'module' });
+        this.worker.onmessage = this.handleWorkerMessage.bind(this);
     }
 
     async init(videoElement, debugCanvas, gameCanvas) {
@@ -24,20 +30,19 @@ export default class GestureEngine {
         this.gameCanvas = gameCanvas;
         this.drawingUtils = new DrawingUtils(this.debugCtx);
 
-        console.log("v3.5.8: Loading AI Model with GPU Delegate...");
-        const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
-        
-        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-            baseOptions: {
-                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-                // v3.5.8 解法 A：强制开启 GPU 硬件加速委托 (WebGL/WebGPU)
-                delegate: "GPU" 
-            },
-            runningMode: "VIDEO",
-            numHands: 1
-        });
-
+        console.log("v3.5.9: Gesture Engine spawning Web Worker...");
         this.startWebcam();
+    }
+
+    // 接收后台线程传回的数据
+    handleWorkerMessage(e) {
+        if (e.data.type === 'INIT_DONE') {
+            console.log("v3.5.9: AI Web Worker is ONLINE and READY!");
+            this.workerReady = true;
+        } else if (e.data.type === 'RESULT') {
+            this.isProcessing = false; // 解开线程锁
+            this.updateStateAndDebugCanvas(e.data);
+        }
     }
 
     startWebcam() {
@@ -54,37 +59,47 @@ export default class GestureEngine {
     }
 
     detectLoop() {
-        if (!this.webcamRunning || !this.handLandmarker) return;
+        if (!this.webcamRunning || !this.workerReady) return;
 
-        // v3.5.8 状态休眠锁：如果游戏没有在进行（比如在主菜单），直接跳过极其昂贵的 AI 计算！
+        // 状态休眠锁
         if (window.gameInstance && window.gameInstance.state !== 'PLAYING') {
-            // 继续维持循环，但彻底释放 CPU 算力
             window.requestAnimationFrame(() => this.detectLoop());
             return;
         }
 
         const now = performance.now();
         
-        // 频率控制器：拒绝 60Hz 满载采样
-        if (now - this.lastDetectTime >= this.detectInterval) {
+        // 频率控制 + 线程积压锁 (!this.isProcessing)
+        if (now - this.lastDetectTime >= this.detectInterval && !this.isProcessing) {
             this.lastDetectTime = now;
             if (this.video.readyState >= 2) {
-                // 因为开启了 delegate: "GPU"，此处的阻塞时间将从 7~10ms 暴降
-                const results = this.handLandmarker.detectForVideo(this.video, now);
-                this.processResults(results);
+                this.isProcessing = true;
+                
+                // 零拷贝抓取视频帧：直接扔给显存/内存底层处理，极速生成位图
+                createImageBitmap(this.video).then(imageBitmap => {
+                    // postMessage 的第二个参数 [imageBitmap] 是 "Transferable" 转移所有权，耗时接近 0ms
+                    this.worker.postMessage({
+                        type: 'PROCESS_FRAME',
+                        image: imageBitmap,
+                        timestamp: now
+                    }, [imageBitmap]); 
+                }).catch(err => {
+                    console.error("Bitmap extraction failed", err);
+                    this.isProcessing = false;
+                });
             }
         }
         
         window.requestAnimationFrame(() => this.detectLoop());
     }
 
-    processResults(results) {
+    // 仅负责 UI 更新与坐标映射
+    updateStateAndDebugCanvas(data) {
+        const { isDetected, gesture, landmarks } = data;
         const ctx = this.debugCtx;
         const canvas = this.debugCanvas;
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // 镜像翻转 Canvas，使其与真实的镜面体验一致
         ctx.save();
         ctx.scale(-1, 1);
         ctx.translate(-canvas.width, 0);
@@ -93,20 +108,13 @@ export default class GestureEngine {
             ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
         }
 
-        if (results.landmarks && results.landmarks.length > 0) {
-            const landmarks = results.landmarks[0];
-            
-            // 绘制骨架与节点
+        if (isDetected && landmarks) {
             this.drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
             this.drawingUtils.drawLandmarks(landmarks, { color: "#FF0000", radius: 3 });
 
-            // 获取掌心中心点 (节点 9) 映射到游戏画布
             const mappedX = (1 - landmarks[9].x) * this.gameCanvas.width;
             const mappedY = landmarks[9].y * this.gameCanvas.height;
             
-            // 手势姿态分析
-            const gesture = this.analyzeHand(landmarks);
-
             this.inputState = {
                 x: mappedX,
                 y: mappedY,
@@ -119,32 +127,6 @@ export default class GestureEngine {
         }
         
         ctx.restore();
-    }
-
-    analyzeHand(landmarks) {
-        // Y坐标向下为正。手指尖(指尖坐标值)比底端(根部坐标值)小，说明手指是伸直的。
-        const isThumbUp = landmarks[4].y < landmarks[3].y;
-        const isIndexUp = landmarks[8].y < landmarks[6].y;
-        const isMiddleUp = landmarks[12].y < landmarks[10].y;
-        const isRingUp = landmarks[16].y < landmarks[14].y;
-        const isPinkyUp = landmarks[20].y < landmarks[18].y;
-
-        // 全弯曲：拳头 (FIST) -> 触发护盾 + 射击
-        if (!isThumbUp && !isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-            return 'FIST';
-        }
-
-        // 大拇指 + 食指伸直，其他弯曲：手枪 (GUN) -> 正常射击
-        if (isThumbUp && isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-            return 'GUN';
-        }
-        
-        // 动态扳机 (RECOIL) -> 释放大招：大拇指伸着，食指刚刚弯下 (扣动扳机)
-        if (isThumbUp && !isIndexUp && !isMiddleUp && !isRingUp && !isPinkyUp) {
-            return 'RECOIL';
-        }
-
-        return 'IDLE';
     }
 
     getInputState() {

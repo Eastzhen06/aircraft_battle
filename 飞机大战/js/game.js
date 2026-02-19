@@ -7,7 +7,6 @@ import SkillSystem from './systems/skillSystem.js';
 import LevelSystem from './systems/level.js';
 import ObjectPool from './utils/objectPool.js';
 
-// 内置关卡数据供选关UI使用
 const CAMPAIGN_LEVELS = [
     { level: 1, name: '新手训练', desc: '纯小怪热身' },
     { level: 2, name: '侦察者', desc: 'Boss: 侦察者' },
@@ -73,10 +72,10 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.5.8 (Performance Tuned)...");
+        console.log("Initializing game v3.5.9 (Web Worker AI Architecture)...");
         window.imageLoader = this.imageLoader;
         
-        // V3.5.8 关键修改：挂载全局实例，供 gesture.js 读取当前状态进行 AI 休眠
+        // V3.5.9 核心: 挂载全局实例供 gesture.js 判断游戏状态
         window.gameInstance = this;
 
         this.setupEventListeners();
