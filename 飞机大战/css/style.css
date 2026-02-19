@@ -9,7 +9,6 @@ html, body {
     font-family: 'Orbitron', sans-serif;
 }
 
-/* Game Container */
 #game-container {
     position: relative;
     width: 100vw;
@@ -24,44 +23,40 @@ canvas#gameCanvas {
     background: #0a0a1a;
 }
 
-/* === 新增: 调试窗口包裹器 v3.0 === */
 .debug-wrapper {
     position: absolute;
     top: 10px;
     left: 10px;
-    width: 240px; /* 固定宽度，配合 transform */
+    width: 240px; 
     height: 180px;
-    z-index: 900; /* 低于暂停按钮 */
+    z-index: 900; 
     background: rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(0, 212, 255, 0.3);
     border-radius: 4px;
-    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* 平滑动画 */
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-/* 收起状态: 移出屏幕左侧，只露一点边缘或完全移出 */
 .debug-wrapper.collapsed {
-    transform: translateX(-250px); /* 240px宽度 + 10px左边距 */
+    transform: translateX(-250px);
 }
 
 canvas#debugCanvas {
     display: block;
     width: 100%;
     height: 100%;
-    /* 移除之前的绝对定位，现在由父级 wrapper 控制 */
     pointer-events: none;
-    transform: scaleX(-1); /* 确保画面是镜像的 */
+    /* v3.1 修复镜像: 移除 transform: scaleX(-1); 避免双重翻转 */
 }
 
-/* 切换按钮 (耳朵/标签) */
 .toggle-tab {
     position: absolute;
     top: 0;
-    right: -40px; /* 挂在右侧外部 */
+    right: -40px;
     width: 40px;
     height: 40px;
     background: rgba(0, 212, 255, 0.2);
     border: 1px solid #00d4ff;
-    border-left: none; /* 与主体融合 */
+    border-left: none;
     border-radius: 0 50% 50% 0;
     color: #fff;
     display: flex;
@@ -73,16 +68,13 @@ canvas#debugCanvas {
     pointer-events: auto;
 }
 
-.toggle-tab:hover {
-    background: rgba(0, 212, 255, 0.4);
-}
+.toggle-tab:hover { background: rgba(0, 212, 255, 0.4); }
 
-/* === Pause Button === */
 #pause-btn {
     position: absolute;
-    top: 200px; /* 位于 Debug Canvas 下方，预留安全距离 */
+    top: 200px;
     left: 20px;
-    z-index: 1001; /* 必须高于 Debug Wrapper */
+    z-index: 1001;
     width: 50px;
     height: 50px;
     background: rgba(0, 212, 255, 0.2);
@@ -94,7 +86,6 @@ canvas#debugCanvas {
     backdrop-filter: blur(5px);
 }
 
-/* Account Icon: 右上角 */
 #account-icon {
     position: absolute;
     top: 20px;
@@ -105,11 +96,8 @@ canvas#debugCanvas {
     filter: drop-shadow(0 0 5px #00d4ff);
     transition: transform 0.2s;
 }
-#account-icon:hover {
-    transform: scale(1.1);
-}
+#account-icon:hover { transform: scale(1.1); }
 
-/* Start Screen */
 .screen {
     position: absolute;
     top: 0;
@@ -124,25 +112,10 @@ canvas#debugCanvas {
     background: rgba(10, 10, 26, 0.95);
 }
 
-.title-container {
-    text-align: center;
-    margin-bottom: 50px;
-}
+.title-container { text-align: center; margin-bottom: 50px; }
+.game-title { font-size: 8vw; color: #00d4ff; text-shadow: 0 0 20px rgba(0, 212, 255, 0.8); margin: 0; }
+.subtitle { font-size: 3vw; color: #fff; letter-spacing: 5px; }
 
-.game-title {
-    font-size: 8vw;
-    color: #00d4ff;
-    text-shadow: 0 0 20px rgba(0, 212, 255, 0.8);
-    margin: 0;
-}
-
-.subtitle {
-    font-size: 3vw;
-    color: #fff;
-    letter-spacing: 5px;
-}
-
-/* Buttons */
 .menu-btn {
     padding: 15px 40px;
     font-size: 24px;
@@ -155,18 +128,9 @@ canvas#debugCanvas {
     box-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
     transition: all 0.2s;
 }
+.menu-btn:active { transform: scale(0.95); }
+.menu-btn.secondary { background: transparent; border: 1px solid #00d4ff; margin-top: 10px; }
 
-.menu-btn:active {
-    transform: scale(0.95);
-}
-
-.menu-btn.secondary {
-    background: transparent;
-    border: 1px solid #00d4ff;
-    margin-top: 10px;
-}
-
-/* Modal */
 .modal-content {
     background: rgba(20, 20, 40, 0.95);
     padding: 40px;
@@ -178,12 +142,8 @@ canvas#debugCanvas {
 }
 .input-group { margin-bottom: 15px; }
 .input-group label { display: block; color: #aaa; margin-bottom: 5px; }
-.input-group input { 
-    width: 100%; padding: 10px; 
-    background: #000; border: 1px solid #333; color: #fff; 
-}
+.input-group input { width: 100%; padding: 10px; background: #000; border: 1px solid #333; color: #fff; }
 
-/* HUD */
 #hud {
     position: absolute;
     top: 10px;
@@ -198,59 +158,67 @@ canvas#debugCanvas {
     flex-direction: column;
     align-items: flex-end;
 }
-
-.hud-item {
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.health-bar {
-    width: 15vw;
-    height: 1.5vh;
-    background: #333;
-    border: 1px solid #fff;
-}
-
-.health-fill {
-    width: 100%;
-    height: 100%;
-    background: #0f0;
-    transition: width 0.2s;
-}
+.hud-item { margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+.health-bar { width: 15vw; height: 1.5vh; background: #333; border: 1px solid #fff; }
+.health-fill { width: 100%; height: 100%; background: #0f0; transition: width 0.2s; }
 
 .hidden { display: none !important; }
 
-/* Pause Screen Specifics */
-.pause-content {
-    text-align: center;
-}
-.pause-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
+.pause-content { text-align: center; }
+.pause-buttons { display: flex; flex-direction: column; gap: 15px; }
+
+.debug-panel { margin-top: 20px; padding: 15px; border: 1px dashed #00d4ff; border-radius: 8px; background: rgba(0, 0, 0, 0.6); text-align: center; }
+.plane-btn { margin: 5px; padding: 8px 15px; font-size: 14px; background: #333; border: 1px solid #666; color: #fff; cursor: pointer; }
+.plane-btn:hover, .plane-btn.active { background: #00d4ff; border-color: #fff; }
+
+/* === v3.1 必杀技能量槽 UI === */
+#ult-container {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40vw;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid #555;
+    border-radius: 12px;
+    z-index: 998;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(0,0,0,0.8);
+    transition: all 0.3s;
 }
 
-/* 调试面板 (Admin) */
-.debug-panel {
-    margin-top: 20px;
-    padding: 15px;
-    border: 1px dashed #00d4ff;
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.6);
-    text-align: center;
+#ult-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #ff8800, #ff0055);
+    transition: width 0.2s ease-out, background 0.3s;
 }
-.plane-btn {
-    margin: 5px;
-    padding: 8px 15px;
+
+#ult-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
     font-size: 14px;
-    background: #333;
-    border: 1px solid #666;
-    color: #fff;
-    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-shadow: 1px 1px 3px black;
+    white-space: nowrap;
 }
-.plane-btn:hover, .plane-btn.active {
-    background: #00d4ff;
-    border-color: #fff;
+
+/* 满能量状态: 高亮呼吸灯 */
+.ult-ready {
+    border-color: #ff0055 !important;
+    box-shadow: 0 0 20px #ff0055 !important;
+    animation: ult-pulse 1s infinite alternate;
+}
+.ult-ready #ult-fill {
+    background: linear-gradient(90deg, #ffcc00, #ff0055);
+}
+
+@keyframes ult-pulse {
+    0% { transform: translateX(-50%) scale(1); opacity: 0.9; }
+    100% { transform: translateX(-50%) scale(1.05); opacity: 1; }
 }

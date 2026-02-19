@@ -2,6 +2,7 @@ import GestureEngine from './engine/gesture.js';
 import Player, { PLANE_TYPES } from './entities/player.js';
 import Bullet from './entities/bullet.js';
 import ImageLoader, { ASSET_SOURCES } from './utils/imageLoader.js';
+import SkillSystem from './systems/skillSystem.js';
 
 class Game {
     constructor() {
@@ -12,7 +13,6 @@ class Game {
         this.pauseBtn = document.getElementById('pause-btn');
         this.pauseScreen = document.getElementById('pause-screen');
         
-        // 注意：GestureEngine 仍然需要直接引用 debugCanvas
         this.debugCanvas = document.getElementById('debugCanvas');
         this.debugWrapper = document.getElementById('debug-wrapper');
         this.debugToggleBtn = document.getElementById('debug-toggle-btn');
@@ -30,6 +30,9 @@ class Game {
 
         this.imageLoader = new ImageLoader();
         this.gestureEngine = new GestureEngine();
+        
+        // v3.1: 初始化必杀系统
+        this.skillSystem = new SkillSystem();
 
         this.player = null;
         this.bullets = [];
@@ -38,7 +41,7 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.0 (Phase 3: Core Loop)...");
+        console.log("Initializing game v3.1 (Phase 3: Ult System & Mirror Fix)...");
         this.setupEventListeners();
         window.addEventListener('resize', () => this.resize());
         this.resize(); 
@@ -48,12 +51,9 @@ class Game {
     }
 
     setupEventListeners() {
-        // === UI 交互: 调试窗口收起/展开 (Phase 3 新增) ===
         if (this.debugToggleBtn && this.debugWrapper) {
             this.debugToggleBtn.addEventListener('click', () => {
                 this.debugWrapper.classList.toggle('collapsed');
-                // 可选：根据状态切换图标，但目前 CSS 中静态图标 '📷' 已经足够表意
-                console.log("Debug camera toggled.");
             });
         }
 
@@ -95,12 +95,21 @@ class Game {
                 this.planeNameUI.textContent = nameMap[type] || type;
             });
         });
+
+        // === v3.1 开发者充能测试入口 ===
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'e' || e.key === 'E') {
+                if (this.state === 'PLAYING') {
+                    console.log("🛠️ Debug: 手动增加必杀能量...");
+                    this.skillSystem.addEnergy(20);
+                }
+            }
+        });
     }
 
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
-        // 传递给手势引擎的 gameCanvas 用于坐标映射，debugCanvas 用于骨架绘制
         if (this.gestureEngine) this.gestureEngine.gameCanvas = this.canvas;
     }
 
@@ -111,14 +120,15 @@ class Game {
         this.resize();
         this.state = 'PLAYING';
         this.lastTime = performance.now();
+        
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType);
         this.bullets = [];
+        this.skillSystem.init(); // 激活 UI
 
         if (!this.gestureEngine.webcamRunning) {
             const video = document.createElement('video');
             video.style.display = 'none';
             document.body.appendChild(video);
-            // v3.0: 这里的逻辑不变，debugCanvas 依然是有效的 DOM 元素
             this.gestureEngine.init(video, this.debugCanvas, this.canvas);
         }
         this.gameLoop(performance.now());
@@ -147,8 +157,13 @@ class Game {
 
     update() {
         if (!this.player) return;
+        
+        // 更新必杀系统状态
+        this.skillSystem.update(this.deltaTime);
+
         const input = this.gestureEngine.getInputState();
-        const shouldShoot = this.player.update(input, this.deltaTime, this.canvas);
+        // 将 skillSystem 传给 Player 以拦截 RECOIL 和处理无敌
+        const shouldShoot = this.player.update(input, this.deltaTime, this.canvas, this.skillSystem);
 
         if (shouldShoot) {
             const bType = this.player.bulletType;
@@ -186,6 +201,13 @@ class Game {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.fillStyle = '#0a0a1a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // 若处于释放必杀期间，可加滤镜或特效背景
+        if (this.skillSystem.state === 'ACTIVE') {
+            this.ctx.fillStyle = `rgba(255, 0, 85, ${0.1 + Math.random() * 0.1})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
         if (this.player) this.player.draw(this.ctx);
         this.bullets.forEach(bullet => bullet.draw(this.ctx));
     }

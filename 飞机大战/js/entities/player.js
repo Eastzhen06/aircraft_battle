@@ -1,7 +1,6 @@
 const LERP_FACTOR = 0.15;
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-// === 机型配置表 v2.4 ===
 export const PLANE_TYPES = {
     'Ranger': { speed: 1.0, hp: 100, shield: 3, bulletType: 'straight', asset: 'Ranger' },
     'Interceptor': { speed: 1.5, hp: 80, shield: 2, bulletType: 'spread', asset: 'Interceptor' },
@@ -14,7 +13,6 @@ export default class Player {
         const config = PLANE_TYPES[type];
         this.image = imageLoader.get(config.asset);
         
-        // 尺寸适配: 0.85倍缩放
         this.width = window.innerWidth * 0.15 * 0.85; 
         
         if (this.image && this.image.width > 0) {
@@ -39,7 +37,8 @@ export default class Player {
         this.bulletType = config.bulletType;
     }
 
-    update(input, deltaTime, canvas) {
+    // v3.1: 传入 skillSystem 进行状态拦截
+    update(input, deltaTime, canvas, skillSystem = null) {
         if (input.isDetected) {
             this.x = lerp(this.x, input.x, LERP_FACTOR);
             this.y = lerp(this.y, input.y, LERP_FACTOR);
@@ -49,16 +48,31 @@ export default class Player {
         this.y = Math.max(this.height / 2, Math.min(this.y, canvas.height - this.height / 2));
 
         let shouldShoot = false;
-        this.isInvincible = this.isShieldActive;
+        
+        // v3.1 逻辑更新: 开盾或释放必杀期间均无敌
+        const isUltActive = skillSystem && skillSystem.state === 'ACTIVE';
+        this.isInvincible = this.isShieldActive || isUltActive;
 
-        switch (input.gesture) {
-            case 'GUN':
-                shouldShoot = this.shoot();
-                break;
-            case 'FIST':
-                this.activateShield();
-                shouldShoot = this.shoot(); 
-                break;
+        // 释放必杀期间，暂停普通射击和护盾判定
+        if (!isUltActive) {
+            switch (input.gesture) {
+                case 'GUN':
+                    shouldShoot = this.shoot();
+                    break;
+                case 'FIST':
+                    this.activateShield();
+                    shouldShoot = this.shoot(); 
+                    break;
+                case 'RECOIL':
+                    // 必杀拦截逻辑
+                    if (skillSystem && skillSystem.isReady()) {
+                        skillSystem.trigger();
+                    } else {
+                        // 能量不满时，RECOIL 退化为普通射击
+                        shouldShoot = this.shoot();
+                    }
+                    break;
+            }
         }
         
         if (this.shootCooldown > 0) this.shootCooldown -= deltaTime;
@@ -88,8 +102,7 @@ export default class Player {
 
     draw(ctx) {
         if (this.isShieldActive) {
-            // v2.4 最终修正：护盾半径设为 0.55 (原 0.65)
-            // 解决 "气泡过大" 问题
+            // 严格坚守 0.55 系数
             const shieldRadius = Math.max(this.width, this.height) * 0.55;
             
             const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
