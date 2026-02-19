@@ -4,7 +4,7 @@ export default class SkillSystem {
         this.maxEnergy = 100;
         this.state = 'CHARGING'; // 'CHARGING' | 'READY' | 'ACTIVE'
         this.activeTimer = 0;
-        this.ultDuration = 2.0; // 必杀技持续 2 秒
+        this.ultDuration = 2.0; 
         
         this.container = document.getElementById('ult-container');
         this.fill = document.getElementById('ult-fill');
@@ -18,7 +18,6 @@ export default class SkillSystem {
         }
     }
 
-    // 获取能量 (未来由 Enemy.die 调用)
     addEnergy(amount) {
         if (this.state !== 'CHARGING') return;
         
@@ -27,7 +26,8 @@ export default class SkillSystem {
         if (this.energy >= this.maxEnergy) {
             this.state = 'READY';
             this.container.classList.add('ult-ready');
-            console.log("🔥 [SYSTEM] ULT READY! 等待手势触发...");
+            // 文案替换
+            console.log("🔥大招准备就绪! 等待手势触发...");
         }
         this.updateUI();
     }
@@ -36,7 +36,6 @@ export default class SkillSystem {
         return this.state === 'READY';
     }
 
-    // 触发必杀技
     trigger() {
         if (!this.isReady()) return false;
         
@@ -45,7 +44,6 @@ export default class SkillSystem {
         this.container.classList.remove('ult-ready');
         
         console.log("🚀 [SYSTEM] ULT TRIGGERED! 全屏清除激活!");
-        // TODO: Task 4 中将在此处调用 enemyManager.clearAll() 或 Boss.takeDamage()
         
         return true;
     }
@@ -54,7 +52,6 @@ export default class SkillSystem {
         if (this.state === 'ACTIVE') {
             this.activeTimer -= deltaTime;
             
-            // 视觉效果：能量条迅速回退
             this.energy = (Math.max(0, this.activeTimer) / this.ultDuration) * this.maxEnergy;
             this.updateUI();
             
@@ -73,9 +70,11 @@ export default class SkillSystem {
         this.fill.style.width = `${(this.energy / this.maxEnergy) * 100}%`;
         
         if (this.state === 'READY') {
-            this.text.textContent = 'ULT READY! (⬆️ 抬手/RECOIL)';
+            // 文案替换
+            this.text.textContent = '🔥大招准备就绪! (⬆️ 抬起食指)';
         } else if (this.state === 'ACTIVE') {
-            this.text.textContent = 'FIRING...';
+            // 文案替换
+            this.text.textContent = '击杀...';
         } else {
             this.text.textContent = `${Math.floor(this.energy)}%`;
         }

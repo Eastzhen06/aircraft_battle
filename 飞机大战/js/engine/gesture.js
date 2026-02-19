@@ -1,6 +1,5 @@
 import { FilesetResolver, HandLandmarker, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm";
 
-// === v2.4 2D 向量工具库 (纯几何) ===
 const vec2 = {
     sub: (v1, v2) => ({ x: v1.x - v2.x, y: v1.y - v2.y }),
     len: (v) => Math.sqrt(v.x * v.x + v.y * v.y),
@@ -23,11 +22,12 @@ export default class GestureEngine {
         
         this.lastState = 'IDLE'; 
         this.isFiring = false; 
-        this.lastFireTime = 0;
-        this.lastVideoTime = -1;
-        this.gunStabilityTimer = 0; 
-        // 记录上一帧食指指尖位置用于计算 2D 速度
-        this.prevIndexTip = null;
+        
+        // === v3.1.5: 脉冲识别系统专用变量 ===
+        this.prevY = { index: 0, middle: 0 };
+        this.lastWristPos = null;
+        this.lastWristTime = 0;
+        this.lastWristSpeed = 0;
     }
 
     async init(a,b,c){this.video=a;this.debugCanvas=b;this.gameCanvas=c;this.debugCtx=this.debugCanvas.getContext("2d");this.drawingUtils=new DrawingUtils(this.debugCtx);try{const d=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");this.handLandmarker=await HandLandmarker.createFromOptions(d,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",delegate:"GPU"},runningMode:"VIDEO",numHands:1,minDetectionConfidence:.5,minTrackingConfidence:.5});this.startWebcam()}catch(d){console.error("GestureEngine init failed:",d)}}
@@ -48,9 +48,9 @@ export default class GestureEngine {
     
     detectLoop(){
         if(!this.webcamRunning||!this.handLandmarker)return void window.requestAnimationFrame(()=>this.detectLoop());
-        if(this.video.readyState>=2&&this.video.currentTime!==this.lastVideoTime){
-            this.lastVideoTime=this.video.currentTime;
-            const results = this.handLandmarker.detectForVideo(this.video, performance.now());
+        const now = performance.now();
+        if(this.video.readyState>=2){
+            const results = this.handLandmarker.detectForVideo(this.video, now);
             this.processResults(results);
         }
         window.requestAnimationFrame(()=>this.detectLoop())
@@ -69,7 +69,6 @@ export default class GestureEngine {
             ctx.drawImage(this.video, 0, 0, canvas.width, canvas.height);
         }
         
-        // v2.4: 仅需 2D landmarks 即可工作，鲁棒性更强
         if (results.landmarks && results.landmarks.length > 0) {
             this.drawingUtils.drawConnectors(results.landmarks[0], HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
             this.drawingUtils.drawLandmarks(results.landmarks[0], { color: "#FF0000", radius: 3 });
@@ -79,8 +78,6 @@ export default class GestureEngine {
         } else {
             this.inputState.gesture = 'IDLE';
             this.inputState.isDetected = false;
-            this.gunStabilityTimer = 0;
-            this.prevIndexTip = null;
         }
         ctx.restore();
     }
@@ -88,7 +85,6 @@ export default class GestureEngine {
     analyzeHand(landmarks) {
         const now = Date.now() / 1000;
         
-        // 1. 坐标映射与平滑
         const sP = landmarks.map((p, i) => ({ 
             x: this.filters[i].x.filter(p.x, now), 
             y: this.filters[i].y.filter(p.y, now) 
@@ -101,84 +97,86 @@ export default class GestureEngine {
 
         const wrist = sP[0];
 
-        // === v2.4 核心算法: 拓扑互斥判定 ===
-        
-        // 辅助函数: 判断手指是直的还是弯的 (基于 PIP 关节距离)
-        // Tip 距离手腕 比 PIP 距离手腕更远 -> 直，反之 -> 弯
+        // === v3.1.5: 脉冲系统前置 - 腕部全局速度否决判定 ===
+        let wristSpeed = 0;
+        if (this.lastWristPos) {
+            const dt = now - this.lastWristTime;
+            if (dt > 0) {
+                const dist = Math.hypot(wrist.x - this.lastWristPos.x, wrist.y - this.lastWristPos.y);
+                wristSpeed = dist / dt;
+            }
+        }
+        this.lastWristPos = wrist;
+        this.lastWristTime = now;
+        this.lastWristSpeed = wristSpeed;
+
+        // === 拓扑识别区 (严格保护旧版逻辑，不作修改) ===
         const isStraight = (tipIdx, pipIdx) => vec2.dist(sP[tipIdx], wrist) > vec2.dist(sP[pipIdx], wrist);
         const isCurled = (tipIdx, pipIdx) => vec2.dist(sP[tipIdx], wrist) < vec2.dist(sP[pipIdx], wrist);
 
-        // 获取各指状态
         const indexStraight = isStraight(8, 6);
         const middleStraight = isStraight(12, 10);
         
-        // 中指、无名指、小指必须严格卷曲
         const middleCurled = isCurled(12, 10); 
         const ringCurled = isCurled(16, 14);
         const pinkyCurled = isCurled(20, 18);
 
         let newState = 'IDLE';
 
-        // --- 逻辑层 1: 剪刀手互斥锁 (Victory Mutex) ---
-        // 只要食指和中指同时伸直，立即判定为无效/IDLE，切断射击可能
         if (indexStraight && middleStraight) {
             newState = 'IDLE'; 
         }
-        // --- 逻辑层 2: 防御模式 (Fist) ---
-        // 食指不直 (或也卷曲) + 其他三指卷曲
         else if (!indexStraight && middleCurled && ringCurled && pinkyCurled) {
             newState = 'FIST';
         }
-        // --- 逻辑层 3: 射击模式 (Pistol Topology) ---
-        // 核心条件: 中指必须卷曲 (Middle Mutex) + 无名/小指卷曲
         else if (middleCurled && ringCurled && pinkyCurled) {
-            // [Z轴/右手修复]: 拓扑信任机制
-            // 只要满足上述“握把”形态 (中/无/小指卷曲)，我们检查食指。
-            // 只要食指“相对”伸展 (比中指长) 或者判定为直，就视为手枪。
-            // 哪怕它垂直指向屏幕 (2D投影很短)，只要比卷曲的中指长，就是射击意图。
             const distIndex = vec2.dist(sP[8], wrist);
             const distMiddle = vec2.dist(sP[12], wrist);
-            
-            // 如果食指物理判定为直，或者 食指长度明显大于卷曲的中指 (1.1倍以上)
             if (indexStraight || (distIndex > distMiddle * 1.1)) {
                 newState = 'GUN';
             }
         }
 
-        // --- 状态机流转 (防抖) ---
-        // 只有 Victory 状态会强制打断 GUN，其他状态允许快速切换
         this.lastState = newState;
 
-        // --- RECOIL (射击动作) 检测 ---
-        // 使用 2D 屏幕空间的指尖位移速度
+        // === v3.1.5: 脉冲系统 (大招/击杀触发逻辑迁移) ===
         let isRecoil = false;
+        let isVeto = false;
+
+        // 仅在手枪形态下才允许检测脉冲
         if (this.lastState === 'GUN') {
-            this.gunStabilityTimer++;
-        } else {
-            this.gunStabilityTimer = 0;
-            this.prevIndexTip = null;
-        }
-        
-        // 射击检测: 比较指尖 Y 轴的瞬间跳动 (模拟扣扳机或手腕上挑)
-        if (this.gunStabilityTimer > 5 && !this.isFiring && this.prevIndexTip) {
-            const currentTipY = sP[8].y;
-            // 计算 Y 轴位移 (屏幕坐标系，向上是 y 减小)
-            // 简单的距离突变检测
-            const delta = vec2.dist(sP[8], this.prevIndexTip);
-            
-            // 阈值需要根据 2D 归一化坐标调整，0.03 约等于屏幕 3% 的高度突变
-            if (delta > 0.03) {
-                isRecoil = true;
-                this.isFiring = true;
-                this.lastFireTime = now;
-                console.log("🚀 RECOIL (2D Topology):", delta.toFixed(4));
+            if (wristSpeed > 0.5) { 
+                // 全局运动否决: 玩家整只手正在快速移动，锁定触发
+                isVeto = true;
+            } else {
+                // 计算 Y 轴单向位移 (模拟后座力上抬)
+                const vIndex = this.prevY.index - sP[8].y; 
+                const vMiddle = this.prevY.middle - sP[12].y;
+                
+                if (vIndex > 0.03) { // 满足食指抬起阈值
+                    if (vMiddle < vIndex * 0.5) { 
+                        // Y 轴隔离阀: 必须是食指独立抬起，排斥手腕上挑
+                        if (!this.isFiring) {
+                            isRecoil = true;
+                            this.isFiring = true; // 防连发状态锁：扣下
+                        }
+                    } else {
+                        isVeto = true; 
+                    }
+                } else if (vIndex < 0.01) {
+                    this.isFiring = false; // 防连发状态锁：回弹解锁
+                }
             }
+        } else {
+            this.isFiring = false;
         }
-        
-        if (now - this.lastFireTime > 0.2) this.isFiring = false;
-        
+
+        // 保存当前帧 Y 坐标，供下一帧比较
+        this.prevY.index = sP[8].y;
+        this.prevY.middle = sP[12].y;
+
+        // 输出最终意图状态
         this.inputState.gesture = isRecoil ? 'RECOIL' : this.lastState;
-        this.prevIndexTip = sP[8]; // 记录本帧位置
     }
 
     getInputState() { return this.inputState; }
