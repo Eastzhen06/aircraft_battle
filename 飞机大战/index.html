@@ -3,33 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - 手势控制 MVP</title>
+    <title>飞机大战 - 手势控制 v3.0</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        /* 新增调试面板样式 */
-        .debug-panel {
-            margin-top: 20px;
-            padding: 15px;
-            border: 1px dashed #00d4ff;
-            border-radius: 8px;
-            background: rgba(0, 0, 0, 0.6);
-            text-align: center;
-        }
-        .plane-btn {
-            margin: 5px;
-            padding: 8px 15px;
-            font-size: 14px;
-            background: #333;
-            border: 1px solid #666;
-            color: #fff;
-            cursor: pointer;
-        }
-        .plane-btn:hover, .plane-btn.active {
-            background: #00d4ff;
-            border-color: #fff;
-        }
-    </style>
 </head>
 <body>
 
@@ -38,7 +14,7 @@
         
         <div class="title-container">
             <h1 class="game-title">飞机大战</h1>
-            <p class="subtitle">手势控制版</p>
+            <p class="subtitle">手势控制版 v3.0</p>
         </div>
         
         <div class="plane-selector">
@@ -76,7 +52,12 @@
 
     <div id="game-container" style="display: none;">
         <canvas id="gameCanvas"></canvas>
-        <canvas id="debugCanvas"></canvas> 
+        
+        <div id="debug-wrapper" class="debug-wrapper collapsed">
+            <canvas id="debugCanvas" width="240" height="180"></canvas>
+            <div id="debug-toggle-btn" class="toggle-tab">📷</div>
+        </div>
+
         <button id="pause-btn">⏸️</button>
 
         <div id="pause-screen" class="screen hidden">

@@ -11,7 +11,12 @@ class Game {
         this.gameContainer = document.getElementById('game-container');
         this.pauseBtn = document.getElementById('pause-btn');
         this.pauseScreen = document.getElementById('pause-screen');
+        
+        // 注意：GestureEngine 仍然需要直接引用 debugCanvas
         this.debugCanvas = document.getElementById('debugCanvas');
+        this.debugWrapper = document.getElementById('debug-wrapper');
+        this.debugToggleBtn = document.getElementById('debug-toggle-btn');
+        
         this.shieldCountUI = document.getElementById('shield-count');
         this.accountIcon = document.getElementById('account-icon');
         this.devModal = document.getElementById('dev-modal');
@@ -33,7 +38,7 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v2.4 (2D Topology)...");
+        console.log("Initializing game v3.0 (Phase 3: Core Loop)...");
         this.setupEventListeners();
         window.addEventListener('resize', () => this.resize());
         this.resize(); 
@@ -43,6 +48,15 @@ class Game {
     }
 
     setupEventListeners() {
+        // === UI 交互: 调试窗口收起/展开 (Phase 3 新增) ===
+        if (this.debugToggleBtn && this.debugWrapper) {
+            this.debugToggleBtn.addEventListener('click', () => {
+                this.debugWrapper.classList.toggle('collapsed');
+                // 可选：根据状态切换图标，但目前 CSS 中静态图标 '📷' 已经足够表意
+                console.log("Debug camera toggled.");
+            });
+        }
+
         document.getElementById('start-btn').addEventListener('click', () => this.startGame());
         this.pauseBtn.addEventListener('click', () => this.togglePause());
         document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
@@ -86,6 +100,7 @@ class Game {
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+        // 传递给手势引擎的 gameCanvas 用于坐标映射，debugCanvas 用于骨架绘制
         if (this.gestureEngine) this.gestureEngine.gameCanvas = this.canvas;
     }
 
@@ -103,6 +118,7 @@ class Game {
             const video = document.createElement('video');
             video.style.display = 'none';
             document.body.appendChild(video);
+            // v3.0: 这里的逻辑不变，debugCanvas 依然是有效的 DOM 元素
             this.gestureEngine.init(video, this.debugCanvas, this.canvas);
         }
         this.gameLoop(performance.now());
