@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - 手势控制 v3.4</title>
+    <title>飞机大战 - 手势控制 v3.5</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -11,16 +11,13 @@
 
     <div id="start-screen" class="screen">
         <div id="account-icon">👤</div>
-        
         <div class="title-container">
             <h1 class="game-title">飞机大战</h1>
-            <p class="subtitle">手势控制版 v3.4</p>
+            <p class="subtitle">手势控制版 v3.5</p>
         </div>
-        
         <div class="plane-selector">
             <p style="color:#00d4ff; margin-bottom:10px;">当前机型: <span id="selected-plane-name" style="font-weight:bold; color:white;">游骑兵</span></p>
         </div>
-
         <div id="admin-debug-panel" class="debug-panel hidden">
             <p style="font-size:12px; color:#aaa; margin-bottom:5px;">-- 开发者调试模式 --</p>
             <button class="plane-btn active" data-type="Ranger">游骑兵 (普通)</button>
@@ -28,11 +25,9 @@
             <button class="plane-btn" data-type="Fortress">重装堡垒 (穿透)</button>
             <button class="plane-btn" data-type="VoidBomber">虚空轰炸 (直射)</button>
         </div>
-
         <div class="menu-container">
-            <button id="start-btn" class="menu-btn">开始游戏</button>
+            <button id="start-btn" class="menu-btn">开始闯关</button>
         </div>
-
         <div id="dev-modal" class="modal screen hidden">
             <div class="modal-content">
                 <h2 class="modal-title">开发者登录</h2>
@@ -50,16 +45,26 @@
         </div>
     </div>
 
+    <div id="campaign-screen" class="screen hidden">
+        <div class="campaign-content">
+            <h2 style="color: #00d4ff; text-shadow: 0 0 10px #00d4ff; margin-bottom: 20px;">选择关卡</h2>
+            <div id="level-grid" class="level-grid"></div>
+            <div class="level-info" id="level-info">
+                <h3 id="level-name">请选择关卡</h3>
+                <p id="level-desc" style="color: #aaa; margin-bottom: 20px;">...</p>
+                <button id="launch-level-btn" class="menu-btn" style="display:none;">出击</button>
+                <button id="back-to-menu-btn" class="menu-btn secondary" style="margin-top: 15px;">返回主菜单</button>
+            </div>
+        </div>
+    </div>
+
     <div id="game-container" style="display: none;">
         <canvas id="gameCanvas"></canvas>
-        
         <div id="debug-wrapper" class="debug-wrapper collapsed">
             <canvas id="debugCanvas" width="240" height="180"></canvas>
             <div id="debug-toggle-btn" class="toggle-tab">📷</div>
         </div>
-
         <button id="pause-btn">⏸️</button>
-
         <div id="pause-screen" class="screen hidden">
              <div class="pause-content">
                 <h2>游戏暂停</h2>
@@ -77,6 +82,9 @@
                 <div class="hud-item"><span class="hud-label">积分</span><span id="score" class="hud-value">0</span></div>
             </div>
             <div class="hud-right">
+                <div class="hud-item" style="justify-content: flex-end;">
+                    <span id="lives-count" class="hud-value" style="color: #ff4444; font-size: 24px;">❤️ x 3</span>
+                </div>
                 <div class="hud-item">
                     <span class="hud-label">生命值</span>
                     <div id="health-bar" class="health-bar"><div id="health-fill" class="health-fill"></div></div>

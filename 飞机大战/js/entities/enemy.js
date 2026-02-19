@@ -8,7 +8,7 @@ export default class Enemy {
         this.speed = 100;
         this.health = 10;
         this.maxHealth = 10;
-        this.scoreValue = 100; // V3.4 新增积分权重
+        this.scoreValue = 100; 
         
         this.movePattern = 'straight';
         this.moveTimer = 0;
@@ -105,15 +105,18 @@ export default class Enemy {
     draw(ctx) {
         if (!this.active) return;
 
+        // 【解决贴图问题】向全局请求图片资源
         const img = window.imageLoader ? window.imageLoader.get(this.imageKey) : null;
         
         if (img) {
             ctx.drawImage(img, this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         } else {
+            // 图片缺失时的防崩溃色块
             ctx.fillStyle = 'red';
             ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         }
 
+        // 血条 (去掉会导致卡顿的高斯模糊)
         if (this.type !== 1 && this.health < this.maxHealth) {
             const healthPercent = this.health / this.maxHealth;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';

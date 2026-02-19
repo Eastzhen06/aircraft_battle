@@ -1,11 +1,12 @@
 const LERP_FACTOR = 0.15;
 function lerp(a, b, t) { return a + (b - a) * t; }
 
+// [修复 3] 补充生命条数 (lives) 设定
 export const PLANE_TYPES = {
-    'Ranger': { speed: 1.0, hp: 100, shield: 3, bulletType: 'straight', asset: 'Ranger' },
-    'Interceptor': { speed: 1.5, hp: 80, shield: 2, bulletType: 'spread', asset: 'Interceptor' },
-    'Fortress': { speed: 0.8, hp: 150, shield: 5, bulletType: 'pierce', asset: 'Fortress' },
-    'VoidBomber': { speed: 0.9, hp: 100, shield: 3, bulletType: 'bomb', asset: 'VoidBomber' }
+    'Ranger': { speed: 1.0, hp: 100, lives: 2, shield: 3, bulletType: 'straight', asset: 'Ranger' },
+    'Interceptor': { speed: 1.5, hp: 80, lives: 2, shield: 2, bulletType: 'spread', asset: 'Interceptor' },
+    'Fortress': { speed: 0.8, hp: 150, lives: 3, shield: 5, bulletType: 'pierce', asset: 'Fortress' },
+    'VoidBomber': { speed: 0.9, hp: 100, lives: 4, shield: 3, bulletType: 'bomb', asset: 'VoidBomber' }
 };
 
 export default class Player {
@@ -14,7 +15,6 @@ export default class Player {
         this.image = imageLoader.get(config.asset);
         
         this.width = window.innerWidth * 0.15 * 0.85; 
-        
         if (this.image && this.image.width > 0) {
             this.height = this.width * (this.image.height / this.image.width);
         } else {
@@ -25,20 +25,25 @@ export default class Player {
         this.y = y;
         
         this.config = config;
-        this.hp = config.hp;
+        this.maxHp = config.hp;
+        this.hp = this.maxHp;
+        this.lives = config.lives;
+        
         this.shieldCount = config.shield;
         this.isShieldActive = false;
         this.shieldTimer = 0;
         this.shieldDuration = 8;
-        this.isInvincible = false;
+        
+        this.isInvincible = false; // 由护盾或大招触发的绝对无敌
+        this.isBlinking = false;   // 掉命后触发的闪烁无敌
+        this.blinkTimer = 0;
 
         this.shootCooldown = 0;
         this.shootInterval = 1 / 7;
         this.bulletType = config.bulletType;
     }
 
-    // v3.1: 传入 skillSystem 进行状态拦截
-    update(input, deltaTime, canvas, skillSystem = null) {
+    update(input, deltaTime, canvas, skillSystem) {
         if (input.isDetected) {
             this.x = lerp(this.x, input.x, LERP_FACTOR);
             this.y = lerp(this.y, input.y, LERP_FACTOR);
@@ -49,28 +54,22 @@ export default class Player {
 
         let shouldShoot = false;
         
-        // v3.1 逻辑更新: 开盾或释放必杀期间均无敌
-        const isUltActive = skillSystem && skillSystem.state === 'ACTIVE';
-        this.isInvincible = this.isShieldActive || isUltActive;
+        // 更新闪烁无敌状态
+        if (this.isBlinking) {
+            this.blinkTimer -= deltaTime;
+            if (this.blinkTimer <= 0) this.isBlinking = false;
+        }
 
-        // 释放必杀期间，暂停普通射击和护盾判定
+        const isUltActive = skillSystem && skillSystem.state === 'ACTIVE';
+        this.isInvincible = this.isShieldActive || isUltActive || this.isBlinking;
+
         if (!isUltActive) {
             switch (input.gesture) {
-                case 'GUN':
-                    shouldShoot = this.shoot();
-                    break;
-                case 'FIST':
-                    this.activateShield();
-                    shouldShoot = this.shoot(); 
-                    break;
+                case 'GUN': shouldShoot = this.shoot(); break;
+                case 'FIST': this.activateShield(); shouldShoot = this.shoot(); break;
                 case 'RECOIL':
-                    // 必杀拦截逻辑
-                    if (skillSystem && skillSystem.isReady()) {
-                        skillSystem.trigger();
-                    } else {
-                        // 能量不满时，RECOIL 退化为普通射击
-                        shouldShoot = this.shoot();
-                    }
+                    if (skillSystem && skillSystem.isReady()) skillSystem.trigger();
+                    else shouldShoot = this.shoot();
                     break;
             }
         }
@@ -99,12 +98,18 @@ export default class Player {
             this.shieldTimer = this.shieldDuration;
         }
     }
+    
+    triggerBlink() {
+        this.isBlinking = true;
+        this.blinkTimer = 3.0; // 3秒无敌闪烁
+    }
 
     draw(ctx) {
+        // 闪烁效果：每 0.1 秒跳过绘制
+        if (this.isBlinking && Math.floor(Date.now() / 100) % 2 === 0) return;
+
         if (this.isShieldActive) {
-            // 严格坚守 0.55 系数
             const shieldRadius = Math.max(this.width, this.height) * 0.55;
-            
             const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
             ctx.fillStyle = `rgba(0, 180, 255, ${alpha})`;
             ctx.beginPath();

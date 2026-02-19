@@ -8,7 +8,7 @@ export default class Boss {
         
         this.width = 180;
         this.height = 140;
-        this.scoreValue = 5000 * level; // V3.4 新增高额积分
+        this.scoreValue = 5000 * level; 
         
         const powerLevel = Math.max(0, level - 2); 
         let baseMultiplier = 1.0;
@@ -168,6 +168,7 @@ export default class Boss {
         const barWidth = this.width;
         const barHeight = 8;
         
+        // 彻底剔除引起卡顿的 shadowBlur
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(this.x - barWidth / 2, this.y - this.height / 2 - 20, barWidth, barHeight);
         
