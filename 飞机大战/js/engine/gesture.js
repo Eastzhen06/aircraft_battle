@@ -23,7 +23,6 @@ export default class GestureEngine {
         this.lastState = 'IDLE'; 
         this.isFiring = false; 
         
-        // === v3.1.5: 脉冲识别系统专用变量 ===
         this.prevY = { index: 0, middle: 0 };
         this.lastWristPos = null;
         this.lastWristTime = 0;
@@ -73,7 +72,10 @@ export default class GestureEngine {
             this.drawingUtils.drawConnectors(results.landmarks[0], HandLandmarker.HAND_CONNECTIONS, { color: "#00FF00", lineWidth: 2 });
             this.drawingUtils.drawLandmarks(results.landmarks[0], { color: "#FF0000", radius: 3 });
             
-            this.analyzeHand(results.landmarks[0]);
+            // 提取左右手信息并传递给 analyzeHand
+            const handedness = (results.handednesses && results.handednesses[0]) ? results.handednesses[0][0].categoryName : 'Right';
+            this.analyzeHand(results.landmarks[0], handedness);
+            
             this.inputState.isDetected = true;
         } else {
             this.inputState.gesture = 'IDLE';
@@ -82,7 +84,8 @@ export default class GestureEngine {
         ctx.restore();
     }
 
-    analyzeHand(landmarks) {
+    // 接收 handedness 参数
+    analyzeHand(landmarks, handedness) {
         const now = Date.now() / 1000;
         
         const sP = landmarks.map((p, i) => ({ 
@@ -97,7 +100,6 @@ export default class GestureEngine {
 
         const wrist = sP[0];
 
-        // === v3.1.5: 脉冲系统前置 - 腕部全局速度否决判定 ===
         let wristSpeed = 0;
         if (this.lastWristPos) {
             const dt = now - this.lastWristTime;
@@ -110,7 +112,6 @@ export default class GestureEngine {
         this.lastWristTime = now;
         this.lastWristSpeed = wristSpeed;
 
-        // === 拓扑识别区 (严格保护旧版逻辑，不作修改) ===
         const isStraight = (tipIdx, pipIdx) => vec2.dist(sP[tipIdx], wrist) > vec2.dist(sP[pipIdx], wrist);
         const isCurled = (tipIdx, pipIdx) => vec2.dist(sP[tipIdx], wrist) < vec2.dist(sP[pipIdx], wrist);
 
@@ -123,59 +124,65 @@ export default class GestureEngine {
 
         let newState = 'IDLE';
 
+        // v3.1.8 方案 B: 动态阈值判定
+        // 判断当前是否是左手 (注意摄像头镜像可能导致左右标定反转，因此匹配 'Left')
+        const isLeftHand = (handedness === 'Left');
+
         if (indexStraight && middleStraight) {
             newState = 'IDLE'; 
-        }
-        else if (!indexStraight && middleCurled && ringCurled && pinkyCurled) {
-            newState = 'FIST';
         }
         else if (middleCurled && ringCurled && pinkyCurled) {
             const distIndex = vec2.dist(sP[8], wrist);
             const distMiddle = vec2.dist(sP[12], wrist);
-            if (indexStraight || (distIndex > distMiddle * 1.1)) {
-                newState = 'GUN';
+            
+            if (isLeftHand) {
+                // 如果是左手，由于透视压缩严重，放宽判定阈值：只要食指2D投影比中指长一点点就认定为 GUN
+                if (indexStraight || (distIndex > distMiddle * 1.02)) {
+                    newState = 'GUN';
+                } else {
+                    newState = 'FIST';
+                }
+            } else {
+                // 右手保持严格判定
+                if (indexStraight || (distIndex > distMiddle * 1.1)) {
+                    newState = 'GUN';
+                } else {
+                    newState = 'FIST';
+                }
             }
         }
 
         this.lastState = newState;
 
-        // === v3.1.5: 脉冲系统 (大招/击杀触发逻辑迁移) ===
         let isRecoil = false;
         let isVeto = false;
 
-        // 仅在手枪形态下才允许检测脉冲
         if (this.lastState === 'GUN') {
             if (wristSpeed > 0.5) { 
-                // 全局运动否决: 玩家整只手正在快速移动，锁定触发
                 isVeto = true;
             } else {
-                // 计算 Y 轴单向位移 (模拟后座力上抬)
                 const vIndex = this.prevY.index - sP[8].y; 
                 const vMiddle = this.prevY.middle - sP[12].y;
                 
-                if (vIndex > 0.03) { // 满足食指抬起阈值
+                if (vIndex > 0.03) { 
                     if (vMiddle < vIndex * 0.5) { 
-                        // Y 轴隔离阀: 必须是食指独立抬起，排斥手腕上挑
                         if (!this.isFiring) {
                             isRecoil = true;
-                            this.isFiring = true; // 防连发状态锁：扣下
+                            this.isFiring = true; 
                         }
                     } else {
                         isVeto = true; 
                     }
                 } else if (vIndex < 0.01) {
-                    this.isFiring = false; // 防连发状态锁：回弹解锁
+                    this.isFiring = false; 
                 }
             }
         } else {
             this.isFiring = false;
         }
 
-        // 保存当前帧 Y 坐标，供下一帧比较
         this.prevY.index = sP[8].y;
         this.prevY.middle = sP[12].y;
-
-        // 输出最终意图状态
         this.inputState.gesture = isRecoil ? 'RECOIL' : this.lastState;
     }
 
