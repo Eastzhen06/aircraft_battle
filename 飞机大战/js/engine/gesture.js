@@ -28,7 +28,7 @@ export default class GestureEngine {
         this.gameCanvas = gameCanvas;
         this.drawingUtils = new DrawingUtils(this.debugCtx);
 
-        console.log("v3.5.94: 320x240 Ratio Fix & Deadzone EMA loaded.");
+        console.log("v3.5.95: 1 Euro Filter & Topology loaded.");
         this.startWebcam();
     }
 
@@ -40,7 +40,7 @@ export default class GestureEngine {
             
             this.inputState.isDetected = e.data.isDetected;
             this.inputState.gesture = e.data.gesture;
-            this.latestLandmarks = e.data.landmarks;
+            this.latestLandmarks = e.data.landmarks; // 这里收到的是已被 Worker 过滤平滑过的绝佳坐标！
             this.fingerStates = e.data.fingerStates || [false,false,false,false,false];
 
             if (e.data.isDetected && e.data.landmarks) {
@@ -81,7 +81,6 @@ export default class GestureEngine {
 
         if (this.workerReady && !this.isProcessing) {
             this.isProcessing = true;
-            // [v3.5.94 核心] 4:3 完美等比缩放至 320x240。既避免了畸变，也把 CPU 计算量砍到了最低。
             createImageBitmap(this.video, { resizeWidth: 320, resizeHeight: 240, resizeQuality: 'low' })
                 .then(imageBitmap => {
                     this.worker.postMessage({

@@ -23,14 +23,6 @@ export default class Player {
         this.x = x;
         this.y = y;
         
-        // --- 物理预测系统变量 (EMA) ---
-        this.targetX = x;
-        this.targetY = y;
-        this.vx = 0; 
-        this.vy = 0; 
-        this.lastInputX = x;
-        this.lastInputY = y;
-        
         this.config = config;
         this.maxHp = config.hp;
         this.hp = this.maxHp;
@@ -51,44 +43,10 @@ export default class Player {
     }
 
     update(input, deltaTime, canvas, skillSystem) {
-        // --- v3.5.94 高级平滑算法：死区 Deadzone + 低通滤波 EMA ---
+        // [V3.5.95 核心变更]：AI 源头已通过 1 Euro Filter 消灭抖动，此处退回最简单高效的线性插值
         if (input.isDetected) {
-            if (input.x !== this.lastInputX || input.y !== this.lastInputY) {
-                const dx = input.x - this.lastInputX;
-                const dy = input.y - this.lastInputY;
-                
-                // 【死区过滤】：如果位移大于 5 像素，才认为是真实意图的移动
-                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-                    this.targetX = input.x;
-                    this.targetY = input.y;
-                    
-                    // 【EMA 滤波】：平滑手部速度，过滤瞬间的数据尖刺
-                    this.vx = this.vx * 0.5 + (dx / deltaTime) * 0.5;
-                    this.vy = this.vy * 0.5 + (dy / deltaTime) * 0.5;
-                } else {
-                    // 死区内微颤：不改变目标位置，但迅速衰减滑行速度 (刹车)
-                    this.vx *= 0.5;
-                    this.vy *= 0.5;
-                }
-                
-                this.lastInputX = input.x;
-                this.lastInputY = input.y;
-            } else {
-                // 【空窗期补偿】：AI 没传新数据时，依据平滑后的速度进行微量物理滑行
-                this.targetX += this.vx * deltaTime;
-                this.targetY += this.vy * deltaTime;
-                
-                // 施加阻尼(Damping)，手停下时战机平稳刹车，不会滑飞
-                this.vx *= 0.8;
-                this.vy *= 0.8;
-            }
-
-            // 执行最终的柔和追击
-            this.x = lerp(this.x, this.targetX, LERP_FACTOR);
-            this.y = lerp(this.y, this.targetY, LERP_FACTOR);
-        } else {
-            this.vx = 0;
-            this.vy = 0;
+            this.x = lerp(this.x, input.x, LERP_FACTOR);
+            this.y = lerp(this.y, input.y, LERP_FACTOR);
         }
 
         // 边界限制

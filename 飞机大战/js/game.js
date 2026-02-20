@@ -72,10 +72,8 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.5.9 (Web Worker AI Architecture)...");
+        console.log("Initializing game v3.5.95 (SOTA Smooth & Topology)...");
         window.imageLoader = this.imageLoader;
-        
-        // V3.5.9 核心: 挂载全局实例供 gesture.js 判断游戏状态
         window.gameInstance = this;
 
         this.setupEventListeners();
