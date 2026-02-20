@@ -43,13 +43,11 @@ export default class Player {
     }
 
     update(input, deltaTime, canvas, skillSystem) {
-        // [V3.5.95 核心变更]：AI 源头已通过 1 Euro Filter 消灭抖动，此处退回最简单高效的线性插值
         if (input.isDetected) {
             this.x = lerp(this.x, input.x, LERP_FACTOR);
             this.y = lerp(this.y, input.y, LERP_FACTOR);
         }
 
-        // 边界限制
         this.x = Math.max(this.width / 2, Math.min(this.x, canvas.width - this.width / 2));
         this.y = Math.max(this.height / 2, Math.min(this.y, canvas.height - this.height / 2));
 

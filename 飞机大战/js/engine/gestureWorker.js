@@ -1,5 +1,5 @@
 // js/engine/gestureWorker.js
-// V3.5.95: 1 Euro Filter (一欧元滤波器) + 距离拓扑学 (Distance Topology)
+// V3.5.98: 1 Euro Filter + MCP FIST + Relative GUN + Dynamic Contraction RECOIL
 
 const vec2 = {
     sub: (v1, v2) => ({ x: v1.x - v2.x, y: v1.y - v2.y }),
@@ -23,6 +23,13 @@ class OneEuroFilter {
 
 let handLandmarker = null;
 let filters = Array(21).fill(null).map(() => ({ x: new OneEuroFilter(1,.007), y: new OneEuroFilter(1,.007), z: new OneEuroFilter(1,.007) }));
+
+let lastBaseGesture = 'IDLE';
+let isFiring = false;
+let lastFireTime = 0;
+// 【V3.5.98 变更】记录食指的归一化长度比例，不再记录 Y 坐标
+let prevIndexRatio = null; 
+let prevTimestamp = 0;
 
 async function initModel() {
     try {
@@ -50,56 +57,93 @@ initModel();
 
 function analyzeHand(rawLandmarks, timestamp) {
     const now = timestamp / 1000; 
+    const dt = prevTimestamp ? (now - prevTimestamp) : 0.033;
+    prevTimestamp = now;
     
-    // 1. 1 Euro Filter 平滑过滤坐标底噪
+    // 平滑处理用于空间定位与姿势锁定
     const sP = rawLandmarks.map((p, i) => ({ 
         x: filters[i].x.filter(p.x, now), 
         y: filters[i].y.filter(p.y, now),
-        z: filters[i].z.filter(p.z, now),
-        visibility: p.visibility 
+        z: filters[i].z.filter(p.z, now)
     }));
 
     const wrist = sP[0];
     
-    // 2. 距离拓扑学：指尖到手腕的距离 > 关节到手腕的距离，则为伸直
     const isStraight = (tipIdx, pipIdx) => vec2.dist(sP[tipIdx], wrist) > vec2.dist(sP[pipIdx], wrist);
-    const isCurled = (tipIdx, pipIdx) => vec2.dist(sP[tipIdx], wrist) < vec2.dist(sP[pipIdx], wrist);
+    const isCurledMCP = (tipIdx, mcpIdx) => vec2.dist(sP[tipIdx], wrist) < vec2.dist(sP[mcpIdx], wrist) * 1.3;
 
-    const isThumbUp = isStraight(4, 3);
-    const isIndexUp = isStraight(8, 6);
-    const isMiddleUp = isStraight(12, 10);
-    const isRingUp = isStraight(16, 14);
-    const isPinkyUp = isStraight(20, 18);
+    let isThumbUp = isStraight(4, 3);
+    let isIndexUp = isStraight(8, 6); 
 
-    const middleCurled = isCurled(12, 10);
-    const ringCurled = isCurled(16, 14);
-    const pinkyCurled = isCurled(20, 18);
+    const middleCurled = isCurledMCP(12, 9);
+    const ringCurled = isCurledMCP(16, 13);
+    const pinkyCurled = isCurledMCP(20, 17);
 
-    let gesture = 'IDLE';
+    let currentBaseGesture = 'IDLE';
 
-    if (isIndexUp && isMiddleUp) {
-        gesture = 'IDLE';
-    } else if (middleCurled && ringCurled && pinkyCurled) {
+    // 严苛的相对拓扑手枪与 MCP 握拳判定
+    if (middleCurled && ringCurled && pinkyCurled) {
         const distIndex = vec2.dist(sP[8], wrist);
         const distMiddle = vec2.dist(sP[12], wrist);
         
-        // 【严格保留放大招逻辑】：拇指伸直，食指弯曲
-        if (isThumbUp && !isIndexUp) {
-            gesture = 'RECOIL';
-        } 
-        // 【完美手枪】：食指伸直，或食指比弯曲的中指明显长
-        else if (isIndexUp || (distIndex > distMiddle * 1.1)) {
-            gesture = 'GUN';
-        } 
-        // 握拳
-        else {
-            gesture = 'FIST';
+        if (isIndexUp || (distIndex > distMiddle * 1.1)) {
+            currentBaseGesture = 'GUN';
+            isIndexUp = true; 
+        } else if (isCurledMCP(8, 5)) { 
+            currentBaseGesture = 'FIST';
+            isIndexUp = false;
+        } else {
+            currentBaseGesture = 'FIST'; 
+            isIndexUp = false;
         }
     }
 
+    // --- V3.5.98 动态收缩归一化脉冲 (Dynamic Contraction) ---
+    let finalGesture = currentBaseGesture;
+    
+    // 获取未经过滤的原始坐标，保持脉冲动作的绝对敏锐
+    const rawIndexTip = rawLandmarks[8];
+    const rawIndexMCP = rawLandmarks[5];
+    const rawMiddleMCP = rawLandmarks[9];
+    const rawWrist = rawLandmarks[0];
+
+    // 1. 食指当前绝对物理长度 (Tip to MCP)
+    const indexLength = vec2.dist(rawIndexTip, rawIndexMCP);
+    // 2. 掌心基底绝对物理长度 (Middle MCP to Wrist)
+    const palmLength = vec2.dist(rawMiddleMCP, rawWrist);
+    // 3. 计算归一化比例 (消除手掌大小和远近透视的影响)
+    const currentIndexRatio = indexLength / palmLength;
+
+    if (lastBaseGesture === 'GUN' && currentBaseGesture === 'GUN') {
+        if (prevIndexRatio !== null && !isFiring) {
+            // 收缩时，长度变短，比例变小。因此 prev - current > 0 代表正在收缩
+            const deltaRatio = prevIndexRatio - currentIndexRatio;
+            const contractionSpeed = deltaRatio / dt; 
+            
+            // 阈值判定：如果收缩速度极快 (即瞬间向掌心收紧)
+            // 1.5 是一个极其稳定的阈值，只有真实的扣扳机动作才能越过，纯粹平移绝对为 0
+            if (contractionSpeed > 1.5) {
+                isFiring = true;
+                lastFireTime = now;
+                finalGesture = 'RECOIL';
+            }
+        }
+    }
+
+    if (isFiring) {
+        if (now - lastFireTime < 0.15) {
+            finalGesture = 'RECOIL'; 
+        } else {
+            isFiring = false; 
+        }
+    }
+
+    lastBaseGesture = currentBaseGesture;
+    prevIndexRatio = currentIndexRatio; // 更新历史比例
+
     return {
-        gesture: gesture,
-        fingerStates: [isThumbUp, isIndexUp, isMiddleUp, isRingUp, isPinkyUp],
+        gesture: finalGesture,
+        fingerStates: [isThumbUp, isIndexUp, !middleCurled, !ringCurled, !pinkyCurled],
         smoothedLandmarks: sP 
     };
 }
@@ -128,7 +172,7 @@ self.onmessage = (e) => {
             isDetected: isDetected,
             gesture: gestureData.gesture,
             fingerStates: gestureData.fingerStates,
-            landmarks: gestureData.smoothedLandmarks // 将平滑后的绝佳坐标传给主线程
+            landmarks: gestureData.smoothedLandmarks 
         });
 
         image.close(); 

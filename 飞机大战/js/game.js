@@ -72,7 +72,7 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.5.95 (SOTA Smooth & Topology)...");
+        console.log("Initializing game v3.5.98 (Normalized Pulse Engine)...");
         window.imageLoader = this.imageLoader;
         window.gameInstance = this;
 

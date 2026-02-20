@@ -28,7 +28,7 @@ export default class GestureEngine {
         this.gameCanvas = gameCanvas;
         this.drawingUtils = new DrawingUtils(this.debugCtx);
 
-        console.log("v3.5.95: 1 Euro Filter & Topology loaded.");
+        console.log("v3.5.98: Dynamic Normalized Contraction Pulse Engine Online.");
         this.startWebcam();
     }
 
@@ -40,7 +40,7 @@ export default class GestureEngine {
             
             this.inputState.isDetected = e.data.isDetected;
             this.inputState.gesture = e.data.gesture;
-            this.latestLandmarks = e.data.landmarks; // 这里收到的是已被 Worker 过滤平滑过的绝佳坐标！
+            this.latestLandmarks = e.data.landmarks; 
             this.fingerStates = e.data.fingerStates || [false,false,false,false,false];
 
             if (e.data.isDetected && e.data.landmarks) {
