@@ -28,7 +28,7 @@ export default class GestureEngine {
         this.gameCanvas = gameCanvas;
         this.drawingUtils = new DrawingUtils(this.debugCtx);
 
-        console.log("v3.5.98: Dynamic Normalized Contraction Pulse Engine Online.");
+        console.log("v3.6.0: SOTA Hierarchical Topology & Raw Recoil Pulse Engine Online.");
         this.startWebcam();
     }
 

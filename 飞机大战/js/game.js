@@ -72,7 +72,7 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.5.98 (Normalized Pulse Engine)...");
+        console.log("Initializing game v3.6.0 (SOTA Vision Pipeline)...");
         window.imageLoader = this.imageLoader;
         window.gameInstance = this;
 
