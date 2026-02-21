@@ -49,13 +49,13 @@ export default class LevelSystem {
         if (!game.playArea) return;
         const enemy = game.enemyPool.get();
         
-        // V3.4 修复 8: 扩大安全生成边距，向中间靠拢
         const margin = Math.max(100, enemy.width);
         const minX = game.playArea.minX + margin;
         const maxX = game.playArea.maxX - margin;
         const spawnX = Math.random() * (maxX - minX) + minX;
         
-        enemy.spawn(spawnX, -50, this.level);
+        // 【v3.7】传入 game.canvas.width，赋予小怪读取百分比的权利
+        enemy.spawn(spawnX, -50, this.level, game.canvas.width);
         if (!game.enemies.includes(enemy)) {
             game.enemies.push(enemy);
         }

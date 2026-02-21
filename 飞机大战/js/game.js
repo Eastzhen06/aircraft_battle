@@ -72,7 +72,7 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.6.0 (SOTA Vision Pipeline)...");
+        console.log("Initializing game v3.7.0 (SOTA Vision & Dynamic Bounds)...");
         window.imageLoader = this.imageLoader;
         window.gameInstance = this;
 
@@ -179,7 +179,8 @@ class Game {
         this.score = 0; 
         this.lastTime = performance.now();
         
-        this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType);
+        // 【v3.7】传入 canvasWidth 进行精确的初始化
+        this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.canvas.width);
         this.bullets = [];
         this.enemyBullets = [];
         this.enemies = [];
@@ -289,18 +290,26 @@ class Game {
             else if (bType === 'bomb') { this.spawnBullet(px, py, 200, 40, 'bomb'); }
         }
 
-        const isOutOfBounds = (x) => (x < this.playArea.minX || x > this.playArea.maxX);
+        // 【v3.7 核心修复】加入了 Y 轴判断，飞出上框边缘立刻触发爆炸特效
+        const isOutOfBounds = (x, y) => (x < this.playArea.minX || x > this.playArea.maxX || y < 10 || y > this.canvas.height + 10);
 
         this.bullets.forEach(b => {
             b.update(this.deltaTime);
-            if (b.active && isOutOfBounds(b.x)) b.active = false;
+            if (b.active && b.state === 'FLYING' && isOutOfBounds(b.x, b.y)) {
+                if (b.type === 'bomb') {
+                    b.state = 'EXPLODING';
+                    b.timer = 0; 
+                } else {
+                    b.active = false;
+                }
+            }
         });
 
         const hitZoneX = this.player.width * 0.4;
         const hitZoneY = this.player.height * 0.4;
         this.enemyBullets.forEach(b => {
             b.update(this.deltaTime);
-            if (b.active && isOutOfBounds(b.x)) {
+            if (b.active && isOutOfBounds(b.x, b.y)) {
                 b.active = false;
             } else if (b.active && Math.abs(b.x - this.player.x) < hitZoneX && Math.abs(b.y - this.player.y) < hitZoneY) {
                 this.handlePlayerDamage(b.damage);
@@ -312,9 +321,17 @@ class Game {
             e.update(this.deltaTime, this.canvas.height, this.playArea, this);
             if (e.active) {
                 this.bullets.forEach(b => {
+                    // 【v3.7 核心修复】只判断状态为 FLYING 的子弹，并且碰撞时立刻引爆炸弹
                     if (b.active && b.state === 'FLYING' && Math.abs(b.x - e.x) < (e.width/2 + b.width/2) && Math.abs(b.y - e.y) < (e.height/2 + b.height/2)) {
                         const killed = e.takeDamage(b.damage);
-                        if (!b.isPiercing) b.active = false;
+                        
+                        if (b.type === 'bomb') {
+                            b.state = 'EXPLODING';
+                            b.timer = 0; // 撞到敌机立马爆炸
+                        } else if (!b.isPiercing) {
+                            b.active = false;
+                        }
+                        
                         if (killed) { this.skillSystem.addEnergy(10); this.score += e.scoreValue; }
                     }
                 });
@@ -337,9 +354,17 @@ class Game {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
             if (this.boss.shouldShoot()) this.boss.shoot(this);
             this.bullets.forEach(b => {
+                // 【v3.7 核心修复】只判断状态为 FLYING 的子弹，撞击 Boss 立刻引爆
                 if (b.active && b.state === 'FLYING' && Math.abs(b.x - this.boss.x) < (this.boss.width/2 + b.width/2) && Math.abs(b.y - this.boss.y) < (this.boss.height/2 + b.height/2)) {
                     const bossKilled = this.boss.takeDamage(b.damage);
-                    if (!b.isPiercing) b.active = false;
+                    
+                    if (b.type === 'bomb') {
+                        b.state = 'EXPLODING';
+                        b.timer = 0; // 撞到Boss立刻引爆
+                    } else if (!b.isPiercing) {
+                        b.active = false;
+                    }
+                    
                     if (bossKilled) this.score += this.boss.scoreValue;
                 }
             });

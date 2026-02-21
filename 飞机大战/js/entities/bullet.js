@@ -29,11 +29,8 @@ export default class Bullet {
         if (this.type === 'bomb') {
             if (this.state === 'FLYING') {
                 this.y -= this.speed * deltaTime;
-                this.timer += deltaTime;
-                if (this.timer > 1.5) {
-                    this.state = 'EXPLODING';
-                    this.timer = 0; 
-                }
+                // 【v3.7 核心修复】彻底剔除基于 this.timer > 1.5 的虚空爆炸
+                // 爆炸命令已转交至 game.js (撞击敌机或飞出屏幕边界时触发)
             } 
             else if (this.state === 'EXPLODING') {
                 this.timer += deltaTime;
@@ -53,7 +50,6 @@ export default class Bullet {
     draw(ctx) {
         if (!this.active) return;
         
-        // [修复 4] 彻底移除 shadowBlur，改用高性能叠加法
         if (this.type === 'bomb') {
             if (this.state === 'FLYING') {
                 ctx.fillStyle = this.color;

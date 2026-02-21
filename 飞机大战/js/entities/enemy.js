@@ -19,7 +19,8 @@ export default class Enemy {
         this.shootTimer = 0;
     }
 
-    spawn(x, y, level) {
+    // 【v3.7】传入 canvasWidth 进行统一规范计算
+    spawn(x, y, level, canvasWidth = window.innerWidth) {
         this.active = true;
         this.x = x;
         this.y = y;
@@ -31,19 +32,25 @@ export default class Enemy {
         const rand = Math.random();
         if (rand < 0.6) {
             this.type = 1; this.imageKey = 'e1';
-            this.width = 40; this.height = 40;
+            // 【v3.7】e1 调整为 12%
+            this.width = canvasWidth * 0.12; 
+            this.height = this.width;
             this.maxHealth = 10 * level;
             this.speed = 150 + level * 10;
             this.scoreValue = 100;
         } else if (rand < 0.9) {
             this.type = 2; this.imageKey = 'e2';
-            this.width = 60; this.height = 60;
+            // 【v3.7】e2 调整为 18%
+            this.width = canvasWidth * 0.18; 
+            this.height = this.width;
             this.maxHealth = 30 * level;
             this.speed = 100 + level * 5;
             this.scoreValue = 300;
         } else {
             this.type = 3; this.imageKey = 'e3';
-            this.width = 90; this.height = 90;
+            // 【v3.7】e3 调整为 25%
+            this.width = canvasWidth * 0.25; 
+            this.height = this.width;
             this.maxHealth = 80 * level;
             this.speed = 70 + level * 2;
             this.scoreValue = 800;
@@ -105,18 +112,15 @@ export default class Enemy {
     draw(ctx) {
         if (!this.active) return;
 
-        // 【解决贴图问题】向全局请求图片资源
         const img = window.imageLoader ? window.imageLoader.get(this.imageKey) : null;
         
         if (img) {
             ctx.drawImage(img, this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         } else {
-            // 图片缺失时的防崩溃色块
             ctx.fillStyle = 'red';
             ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         }
 
-        // 血条 (去掉会导致卡顿的高斯模糊)
         if (this.type !== 1 && this.health < this.maxHealth) {
             const healthPercent = this.health / this.maxHealth;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';

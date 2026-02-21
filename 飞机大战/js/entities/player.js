@@ -9,11 +9,13 @@ export const PLANE_TYPES = {
 };
 
 export default class Player {
-    constructor(x, y, imageLoader, type = 'Ranger') {
+    // 【v3.7 引入 canvasWidth 作为百分比计算基准】
+    constructor(x, y, imageLoader, type = 'Ranger', canvasWidth = window.innerWidth) {
         const config = PLANE_TYPES[type];
         this.image = imageLoader.get(config.asset);
         
-        this.width = window.innerWidth * 0.15 * 0.85; 
+        // 【v3.7 重构】全面采用百分比制，玩家战机固定为 18%
+        this.width = canvasWidth * 0.18; 
         if (this.image && this.image.width > 0) {
             this.height = this.width * (this.image.height / this.image.width);
         } else {
@@ -24,7 +26,8 @@ export default class Player {
         this.y = y;
         
         this.config = config;
-        this.maxHp = config.hp;
+        // 【v3.7 数值平衡】单条血量增加 200% (即原本的 3 倍)
+        this.maxHp = config.hp * 3;
         this.hp = this.maxHp;
         this.lives = config.lives;
         
@@ -106,6 +109,7 @@ export default class Player {
         if (this.isBlinking && Math.floor(Date.now() / 100) % 2 === 0) return;
 
         if (this.isShieldActive) {
+            // 【v3.7 护盾联动】护盾半径与战机最新百分比宽度强绑定，拒绝穿模
             const shieldRadius = Math.max(this.width, this.height) * 0.55;
             const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
             ctx.fillStyle = `rgba(0, 180, 255, ${alpha})`;

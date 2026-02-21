@@ -6,8 +6,11 @@ export default class Boss {
         this.bossIndex = Math.min(9, Math.max(1, level - 1));
         this.imageKey = 'b' + this.bossIndex;
         
-        this.width = 180;
-        this.height = 140;
+        // 【v3.7 重构】获取安全交互区宽度，强制 Boss 填充至 80%
+        const interactiveWidth = playArea.maxX - playArea.minX;
+        this.width = interactiveWidth * 0.80;
+        this.height = this.width * (140 / 180); // 维持原有宽扁造型的像素比
+        
         this.scoreValue = 5000 * level; 
         
         const powerLevel = Math.max(0, level - 2); 
@@ -168,7 +171,6 @@ export default class Boss {
         const barWidth = this.width;
         const barHeight = 8;
         
-        // 彻底剔除引起卡顿的 shadowBlur
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(this.x - barWidth / 2, this.y - this.height / 2 - 20, barWidth, barHeight);
         
