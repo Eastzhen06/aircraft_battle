@@ -26,7 +26,8 @@ import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3").then(async
 }).catch(err => console.error("[Worker] 模块请求失败:", err));
 
 function analyzeHand(rawLandmarks, timestamp) {
-    if (typeof analyzeHand.lastTipY === 'undefined') analyzeHand.lastTipY = 0;
+    if (typeof analyzeHand.lastIndexY === 'undefined') analyzeHand.lastIndexY = 0;
+    if (typeof analyzeHand.lastWristY === 'undefined') analyzeHand.lastWristY = 0;
     if (typeof analyzeHand.isRecoilLocked === 'undefined') analyzeHand.isRecoilLocked = false;
     
     if (typeof self.filtersX === 'undefined') {
@@ -34,58 +35,59 @@ function analyzeHand(rawLandmarks, timestamp) {
         self.filtersY = Array(21).fill(0).map(() => new OneEuroFilter(1.0, 0.001));
     }
 
-    // 保留原始的 z 坐标用于高维判定
     const sP = rawLandmarks.map((p, i) => ({
         x: self.filtersX[i].filter(p.x, timestamp),
-        y: self.filtersY[i].filter(p.y, timestamp),
-        z: p.z 
+        y: self.filtersY[i].filter(p.y, timestamp)
     }));
 
-    const wrist = sP[0];
-    const palmLength = Math.hypot(sP[0].x - sP[9].x, sP[0].y - sP[9].y) || 0.001;
-    const getDist2D = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
-    
-    // 【OS2 防误触优化】2D 距离 + Z轴深度特判 (Override)
-    const isStraight = (tip, pip) => {
-        // 条件1: 正常的 2D 伸直判定
-        if (getDist2D(sP[tip], wrist) > getDist2D(sP[pip], wrist)) return true;
-        // 条件2: 空间透视补偿。指尖比PIP关节更靠近屏幕至少 0.04 个相对深度单位
-        if (sP[tip].z < sP[pip].z - 0.04) return true;
-        return false;
+    // 【修复 5 & 6】拓扑学比例法 (Scale Invariance Ratio)
+    // 算法依据：指尖到手腕距离 / 对应掌指关节(MCP)到手腕距离
+    const getRatio = (tipIndex, mcpIndex) => {
+        const tipDist = vec2.dist(sP[tipIndex], sP[0]);
+        const mcpDist = vec2.dist(sP[mcpIndex], sP[0]);
+        return tipDist / (mcpDist || 0.001); 
     };
-    const isCurled = (tip, pip) => !isStraight(tip, pip);
 
-    const isIndexUp = isStraight(8, 6);
-    const isMiddleCurled = isCurled(12, 10);
-    const isRingCurled = isCurled(16, 14);
-    const isPinkyCurled = isCurled(20, 18);
+    // 比例 > 1.15 视为伸直 (兼容手指正对摄像头的透视缩短)
+    // 比例 < 0.9 视为完全内扣 (握拳防误判底线)
+    const isIndexUp = getRatio(8, 5) > 1.15;
+    const isMiddleCurled = getRatio(12, 9) < 0.9;
+    const isRingCurled = getRatio(16, 13) < 0.9;
+    const isPinkyCurled = getRatio(20, 17) < 0.9;
 
     const isPistol = isIndexUp && isMiddleCurled && isRingCurled && isPinkyCurled;
-    const isFist = isCurled(8, 6) && isMiddleCurled && isRingCurled && isPinkyCurled;
+    const isFist = getRatio(8, 5) < 0.9 && isMiddleCurled && isRingCurled && isPinkyCurled;
 
     let finalGesture = 'IDLE';
-    let currentTipY = sP[8].y;
+    let currentIndexY = sP[8].y;
+    let currentWristY = sP[0].y;
 
     if (isPistol) {
         finalGesture = 'GUN'; 
-        let yMovement = analyzeHand.lastTipY - currentTipY; 
-        if (!analyzeHand.isRecoilLocked && yMovement > palmLength * 0.15 && yMovement < palmLength * 0.8) {
+        // 动力学速度：仅计算食指相对手腕的独立位移（剔除手臂整体挥动的干扰）
+        let vIndex = analyzeHand.lastIndexY - currentIndexY; 
+        let vWrist = analyzeHand.lastWristY - currentWristY;
+        let relativeMovement = vIndex - vWrist; 
+
+        // 仅当食指发生独立快速下压时触发大招
+        if (!analyzeHand.isRecoilLocked && relativeMovement > 0.04) {
             finalGesture = 'RECOIL'; 
             analyzeHand.isRecoilLocked = true; 
         }
-        if (analyzeHand.isRecoilLocked && yMovement <= 0) analyzeHand.isRecoilLocked = false;
+        if (analyzeHand.isRecoilLocked && relativeMovement <= 0) analyzeHand.isRecoilLocked = false;
     } else if (isFist) {
         finalGesture = 'FIST';
         analyzeHand.isRecoilLocked = false;
     } else {
-        analyzeHand.isRecoilLocked = false; // 重置锁防卡死
+        analyzeHand.isRecoilLocked = false; 
     }
 
-    analyzeHand.lastTipY = currentTipY;
+    analyzeHand.lastIndexY = currentIndexY;
+    analyzeHand.lastWristY = currentWristY;
 
     return {
         gesture: finalGesture,
-        fingerStates: [isStraight(4,3), isIndexUp, !isMiddleCurled, !isRingCurled, !isPinkyCurled],
+        fingerStates: [getRatio(4, 2) > 1.15, isIndexUp, !isMiddleCurled, !isRingCurled, !isPinkyCurled],
         landmarks: sP 
     };
 }
@@ -93,7 +95,6 @@ function analyzeHand(rawLandmarks, timestamp) {
 self.onmessage = (e) => {
     if (e.data.type === 'PROCESS_FRAME') {
         const { image, timestamp } = e.data;
-
         const sendUnlockMessage = (isDetected, data) => {
             self.postMessage({
                 type: 'RESULT', 
@@ -104,16 +105,13 @@ self.onmessage = (e) => {
             });
             if (image && image.close) image.close(); 
         };
-
         if (!handLandmarker) return sendUnlockMessage(false, null);
 
         try {
             let safeTimestamp = timestamp;
             if (safeTimestamp <= lastProcessedTime) safeTimestamp = lastProcessedTime + 1;
             lastProcessedTime = safeTimestamp;
-
             const results = handLandmarker.detectForVideo(image, safeTimestamp);
-
             if (results.landmarks && results.landmarks.length > 0) {
                 const gestureData = analyzeHand(results.landmarks[0], safeTimestamp);
                 sendUnlockMessage(true, gestureData);
@@ -121,7 +119,6 @@ self.onmessage = (e) => {
                 sendUnlockMessage(false, null);
             }
         } catch (err) {
-            console.error("[Worker] 视觉分析异常:", err);
             sendUnlockMessage(false, null);
         }
     }

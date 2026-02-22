@@ -20,7 +20,6 @@ const CAMPAIGN_LEVELS = [
     { level: 10, name: '帝王', desc: '最终战: 帝王' }
 ];
 
-// 【OS2 新增】科幻六边形脉冲掉落道具
 class Powerup {
     constructor() {
         this.active = false;
@@ -59,11 +58,10 @@ class Powerup {
         else if (this.type === 'POWER') { color = '#FF4400'; symbol = '⚡'; } 
         else if (this.type === 'SHIELD') { color = '#00CCFF'; symbol = '⛨'; }
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        // 【修复 2】剔除 ctx.shadowBlur = 15; 拯救掉帧，改用多层半透明描边模拟辉光
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 15;
 
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
@@ -74,10 +72,18 @@ class Powerup {
             else ctx.lineTo(px, py);
         }
         ctx.closePath();
-        ctx.fill(); ctx.stroke();
+        ctx.fill(); 
+        
+        // 伪辉光
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = 6;
+        ctx.stroke();
+        ctx.restore();
+        
+        ctx.stroke(); // 内层实线
 
         ctx.rotate(-this.angle);
-        ctx.shadowBlur = 0;
         ctx.fillStyle = color;
         ctx.font = `bold ${this.width * 0.5}px Arial`;
         ctx.textAlign = 'center';
@@ -105,9 +111,6 @@ class Game {
         this.levelUI = document.getElementById('level-display');
         this.livesUI = document.getElementById('lives-count');
         
-        this.accountIcon = document.getElementById('account-icon');
-        this.devModal = document.getElementById('dev-modal');
-        this.adminPanel = document.getElementById('admin-debug-panel');
         this.planeNameUI = document.getElementById('selected-plane-name');
 
         this.state = 'MENU';
@@ -138,6 +141,7 @@ class Game {
         this.currentPlaneType = 'Ranger';
         
         this.playArea = { minX: 0, maxX: window.innerWidth };
+        this.interactiveWidth = window.innerWidth;
     }
 
     init() {
@@ -184,6 +188,8 @@ class Game {
         const minX = 260; 
         const maxX = this.canvas.width - 320;
         this.playArea = { minX, maxX };
+        // 【修复 5】基于安全交互区宽度计算比例
+        this.interactiveWidth = maxX - minX;
     }
 
     setupEventListeners() {
@@ -211,16 +217,6 @@ class Game {
         document.getElementById('restart-btn-pause').addEventListener('click', () => location.reload());
         document.getElementById('menu-btn-pause').addEventListener('click', () => location.reload());
 
-        if (this.accountIcon) this.accountIcon.addEventListener('click', () => this.devModal.classList.toggle('hidden'));
-        document.getElementById('dev-modal-close-btn').addEventListener('click', () => this.devModal.classList.add('hidden'));
-
-        document.getElementById('login-submit-btn').addEventListener('click', () => {
-            if (document.getElementById('login-account').value === '0001' && document.getElementById('login-password').value === '1011') {
-                this.devModal.classList.add('hidden');
-                this.adminPanel.classList.remove('hidden');
-            } else alert("账号或密码错误！");
-        });
-
         const planeBtns = document.querySelectorAll('.plane-btn');
         planeBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -247,7 +243,8 @@ class Game {
         this.score = 0; 
         this.lastTime = performance.now();
         
-        this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.canvas.width);
+        // 传入 interactiveWidth 而非全屏宽度
+        this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.interactiveWidth);
         this.bullets = [];
         this.enemyBullets = [];
         this.enemies = [];
@@ -328,7 +325,7 @@ class Game {
                 this.enemyBullets.forEach(b => b.active = false);
             } else {
                 this.state = 'GAME_OVER';
-                alert("战斗失败！请刷新页面重新开始。");
+                alert("机体严重受损！任务失败。");
             }
         }
     }
@@ -347,7 +344,6 @@ class Game {
 
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
         
-        // 【OS2 核心修复】解除 isBlinking 开火锁，无敌闪烁期间允许全面反击
         if (shouldShoot) { 
             const px = this.player.x; const py = this.player.y - this.player.height / 2;
             const bType = this.player.bulletType;
@@ -412,7 +408,6 @@ class Game {
                 this.bullets.forEach(b => {
                     if (b.active && b.state === 'FLYING') {
                         let collision = false;
-                        // 【OS2 核心修复】虚空轰炸机子弹采用 0.7(实体) 与 0.5(子弹) 的缩放系数，杜绝空气墙爆炸
                         if (b.type === 'bomb') {
                             const collX = (e.width/2 * 0.7) + (b.width/2 * 0.5);
                             const collY = (e.height/2 * 0.7) + (b.height/2 * 0.5);
@@ -429,8 +424,9 @@ class Game {
                             if (killed) { 
                                 this.skillSystem.addEnergy(10); 
                                 this.score += e.scoreValue; 
-                                // 【OS2 掉落机制】击杀 E3 掉落科技箱
-                                if (e.type === 3) {
+                                
+                                // 【修复 3】E3 必掉，E2 40%概率掉落
+                                if (e.type === 3 || (e.type === 2 && Math.random() < 0.4)) {
                                     const p = this.powerupPool.get();
                                     p.spawn(e.x, e.y);
                                     if (!this.powerups.includes(p)) this.powerups.push(p);
@@ -459,7 +455,6 @@ class Game {
             this.bullets.forEach(b => {
                 if (b.active && b.state === 'FLYING') {
                     let collision = false;
-                    // 【OS2 核心修复】对 Boss 的轰炸同样应用收缩机制
                     if (b.type === 'bomb') {
                         const collX = (this.boss.width/2 * 0.7) + (b.width/2 * 0.5);
                         const collY = (this.boss.height/2 * 0.7) + (b.height/2 * 0.5);
@@ -533,7 +528,6 @@ class Game {
         const y = this.canvas.height - 60;
         this.ctx.font = '12px Orbitron, Courier New';
         this.ctx.textAlign = 'left';
-        
         this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00d4ff';
         this.ctx.fillText(`FPS: ${Math.round(this.fps)}`, x, y);
         this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00d4ff';

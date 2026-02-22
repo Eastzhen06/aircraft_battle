@@ -55,8 +55,9 @@ export default class LevelSystem {
         const maxX = game.playArea.maxX - margin;
         const spawnX = Math.random() * (maxX - minX) + minX;
         
-        // 【OS2 升级】传入 canvasWidth 与 currentPlaneType，触发绝对属性壁垒
-        enemy.spawn(spawnX, -50, this.level, game.canvas.width, game.currentPlaneType);
+        // 【v3.7.5 最终修复】将全屏宽度改为 interactiveWidth，真正实现基于交互区计算敌机比例
+        enemy.spawn(spawnX, -50, this.level, game.interactiveWidth, game.currentPlaneType);
+        
         if (!game.enemies.includes(enemy)) {
             game.enemies.push(enemy);
         }

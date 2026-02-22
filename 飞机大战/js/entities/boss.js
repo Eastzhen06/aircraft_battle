@@ -6,9 +6,9 @@ export default class Boss {
         this.bossIndex = Math.min(9, Math.max(1, level - 1));
         this.imageKey = 'b' + this.bossIndex;
         
-        // 【OS2 重构】Boss 占比调整为 70%
+        // 【修复 5】基于交互区宽度，Boss 设定为 85% 且按原图比例换算不拉伸
         const interactiveWidth = playArea.maxX - playArea.minX;
-        this.width = interactiveWidth * 0.70;
+        this.width = interactiveWidth * 0.85;
         this.height = this.width * (140 / 180); 
         
         this.scoreValue = 5000 * level; 
@@ -167,13 +167,12 @@ export default class Boss {
             ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         }
         
-        // 【OS2 核心修复】Boss 血量条绝对置顶，脱离实体坐标绑定
         const healthPercent = this.health / this.maxHealth;
         const barWidth = 600;
         const barHeight = 15;
         const canvasWidth = ctx.canvas.width;
         const screenX = canvasWidth / 2 - barWidth / 2;
-        const screenY = 20; // 屏幕最上方
+        const screenY = 20;
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(screenX, screenY, barWidth, barHeight);

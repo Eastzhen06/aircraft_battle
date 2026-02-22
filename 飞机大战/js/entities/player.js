@@ -9,12 +9,12 @@ export const PLANE_TYPES = {
 };
 
 export default class Player {
-    constructor(x, y, imageLoader, type = 'Ranger', canvasWidth = window.innerWidth) {
+    constructor(x, y, imageLoader, type = 'Ranger', interactiveWidth = window.innerWidth) {
         const config = PLANE_TYPES[type];
         this.image = imageLoader.get(config.asset);
         
-        // 【OS2 优化】我方战机占屏比严格修改为 10%
-        this.width = canvasWidth * 0.10; 
+        // 【修复 5】战机尺寸基于交互区宽度计算，10% 占比
+        this.width = interactiveWidth * 0.10; 
         if (this.image && this.image.width > 0) {
             this.height = this.width * (this.image.height / this.image.width);
         } else {
@@ -25,7 +25,7 @@ export default class Player {
         this.y = y;
         
         this.config = config;
-        this.maxHp = config.hp * 3; // 保持 300% 生存力
+        this.maxHp = config.hp * 3; 
         this.hp = this.maxHp;
         this.lives = config.lives;
         
@@ -41,8 +41,6 @@ export default class Player {
         this.shootCooldown = 0;
         this.shootInterval = 1 / 7;
         this.bulletType = config.bulletType;
-        
-        // 【OS2 新增】道具层火力强化系统接口
         this.powerLevel = 0; 
     }
 
@@ -106,7 +104,6 @@ export default class Player {
         this.blinkTimer = 3.0; 
     }
 
-    // OS2 掉落道具接口调用
     heal(amount) { this.hp = Math.min(this.maxHp, this.hp + amount); }
     increasePower() { this.powerLevel = Math.min(2, this.powerLevel + 1); }
 
