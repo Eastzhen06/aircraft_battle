@@ -1,4 +1,3 @@
-// [修复 1] 严格映射真实图像路径
 export const ASSET_SOURCES = {
     // === 玩家战机 (a系列) ===
     'Ranger': './picture/oura/a1.png',
@@ -7,20 +6,27 @@ export const ASSET_SOURCES = {
     'VoidBomber': './picture/oura/a4.png',
     
     // === 普通敌机 (e系列) ===
-    'e1': './picture/enemy/e1.png', // 小型
-    'e2': './picture/enemy/e2.png', // 中型
-    'e3': './picture/enemy/e3.png', // 大型
+    'e1': './picture/enemy/e1.png', 
+    'e2': './picture/enemy/e2.png', 
+    'e3': './picture/enemy/e3.png', 
 
-    // === Boss 战机 (b系列，对应你提供的英文名) ===
-    'b1': './picture/boss/scouter.png',     // 第2关: 侦察者
-    'b2': './picture/boss/Raider.png',      // 第3关: 突击者
-    'b3': './picture/boss/fortress.png',    // 第4关: 堡垒
-    'b4': './picture/boss/umbra.png',       // 第5关: 暗影
-    'b5': './picture/boss/storm.png',       // 第6关: 风暴
-    'b6': './picture/boss/eddy.png',        // 第7关: 漩涡
-    'b7': './picture/boss/adjudicator.png', // 第8关: 审判者
-    'b8': './picture/boss/doomsday.png',    // 第9关: 末日
-    'b9': './picture/boss/emperor.png'      // 第10关: 帝王
+    // === Boss 战机 (b系列) ===
+    'b1': './picture/boss/scouter.png',     
+    'b2': './picture/boss/Raider.png',      
+    'b3': './picture/boss/fortress.png',    
+    'b4': './picture/boss/umbra.png',       
+    'b5': './picture/boss/storm.png',       
+    'b6': './picture/boss/eddy.png',        
+    'b7': './picture/boss/adjudicator.png', 
+    'b8': './picture/boss/doomsday.png',    
+    'b9': './picture/boss/emperor.png',     
+
+    // ==========================================
+    // 【v4.0 修改部分：新增僚机系统图片注册】
+    // ==========================================
+    'w_defensive': './picture/ourb/b1.png',
+    'w_offensive': './picture/ourb/b2.png',
+    'w_magnetic': './picture/ourb/b3.png'
 }; 
 
 export default class ImageLoader {
@@ -50,16 +56,12 @@ export default class ImageLoader {
                 }
             };
             img.onerror = () => {
-                console.error(`❌ [404 ERROR] 无法加载资源: ${key} -> 路径: ${path}`);
-                this.loadedCount++;
-                if (this.loadedCount === this.imageCount && onComplete) {
-                    onComplete();
-                }
+                console.error(`❌ [ImageLoader] Failed to load image: ${key} at ${path}`);
             };
         }
     }
 
     get(key) {
-        return this.images[key] || null;
+        return this.images[key];
     }
 }

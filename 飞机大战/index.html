@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - OS2 终极架构 v3.7.5</title>
+    <title>飞机大战 - OS2 终极架构 v4.0</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -12,24 +12,33 @@
     <div id="start-screen" class="screen os2-panel">
         <div class="title-container">
             <h1 class="game-title">飞机大战</h1>
-            <p class="subtitle">OS2 机甲操控端</p>
+            <p class="subtitle">OS2 指尖长空</p>
         </div>
         
         <div class="plane-selector">
-            <p style="color:#00d4ff; margin-bottom:10px; font-size: 1.2em;">当前挂载机型: <span id="selected-plane-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">游骑兵</span></p>
+            <p style="color:#00d4ff; margin-bottom:5px; font-size: 1.2em;">挂载机型: <span id="selected-plane-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">游骑兵</span></p>
+            <p style="color:#00FF44; margin-bottom:10px; font-size: 1.1em;">辅助僚机: <span id="selected-wingman-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">无僚机</span></p>
         </div>
 
-        <div id="admin-debug-panel" class="debug-panel" style="margin-top: 20px; border: 1px solid #00d4ff; padding: 15px; border-radius: 8px; background: rgba(0,212,255,0.05);">
-            <p style="font-size:12px; color:#00d4ff; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 开发者机型配置 --</p>
-            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
-                <button class="plane-btn active" data-type="Ranger">游骑兵 (普通)</button>
-                <button class="plane-btn" data-type="Interceptor">拦截者 (扇形)</button>
-                <button class="plane-btn" data-type="Fortress">重装堡垒 (穿透)</button>
+        <div id="admin-debug-panel" class="debug-panel" style="margin-top: 10px; border: 1px solid #00d4ff; padding: 15px; border-radius: 8px; background: rgba(0,212,255,0.05); width: 80%; max-width: 400px;">
+            <p style="font-size:12px; color:#00d4ff; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 机甲终端配置 --</p>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;">
+                <button class="plane-btn active" data-type="Ranger">游骑兵</button>
+                <button class="plane-btn" data-type="Interceptor">拦截者</button>
+                <button class="plane-btn" data-type="Fortress">重装堡垒</button>
                 <button class="plane-btn" data-type="VoidBomber">虚空轰炸机</button>
+            </div>
+            
+            <p style="font-size:12px; color:#00FF44; margin-top:15px; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 僚机系统挂载 --</p>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;">
+                <button class="wingman-btn active" data-type="none">无僚机</button>
+                <button class="wingman-btn" data-type="defensive">防御盾卫</button>
+                <button class="wingman-btn" data-type="offensive">侧翼火力</button>
+                <button class="wingman-btn" data-type="magnetic">引力磁枢</button>
             </div>
         </div>
         
-        <button id="start-btn" class="btn primary" style="margin-top: 30px; font-size: 1.5em; padding: 15px 40px;">进入作战中心</button>
+        <button id="start-btn" class="btn primary" style="margin-top: 20px; font-size: 1.5em; padding: 15px 40px;">进入作战中心</button>
     </div>
 
     <div id="campaign-screen" class="screen hidden os2-panel">
@@ -47,12 +56,10 @@
 
     <div id="game-container" style="display: none;">
         <canvas id="gameCanvas"></canvas>
-        
         <div id="debug-wrapper" class="debug-wrapper os2-panel">
             <canvas id="debugCanvas"></canvas>
             <div id="debug-info" class="debug-info">
-                <span id="fps-display">FPS: 0</span> | 
-                <span id="gesture-display">动作: IDLE</span>
+                <span id="fps-display">FPS: 0</span> | <span id="gesture-display">动作: IDLE</span>
             </div>
             <button id="debug-toggle-btn" class="toggle-tab">◀</button>
         </div>
@@ -95,7 +102,6 @@
             <span id="ult-text">0%</span>
         </div>
     </div>
-    
     <script type="module" src="js/game.js"></script>
 </body>
 </html>

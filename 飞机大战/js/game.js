@@ -6,6 +6,8 @@ import ImageLoader, { ASSET_SOURCES } from './utils/imageLoader.js';
 import SkillSystem from './systems/skillSystem.js';
 import LevelSystem from './systems/level.js';
 import ObjectPool from './utils/objectPool.js';
+// 【v4.0 引入模块】
+import Wingman from './entities/wingman.js';
 
 const CAMPAIGN_LEVELS = [
     { level: 1, name: '新手训练', desc: '纯小怪热身' },
@@ -33,14 +35,28 @@ class Powerup {
     spawn(x, y) {
         this.active = true;
         this.x = x; this.y = y;
+        this.isMagnetized = false; // 【v4.0 新增】磁化状态
         const r = Math.random();
         if (r < 0.33) this.type = 'HEALTH';
         else if (r < 0.66) this.type = 'POWER';
         else this.type = 'SHIELD';
     }
-    update(deltaTime, canvasHeight) {
+    update(deltaTime, canvasHeight, player) {
         if (!this.active) return;
-        this.y += this.speed * deltaTime;
+        
+        // 【v4.0 引力磁枢物理覆写】：被磁化后无视重力，高速向玩家坍缩
+        if (this.isMagnetized && player) {
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 0) {
+                this.x += (dx / dist) * 500 * deltaTime;
+                this.y += (dy / dist) * 500 * deltaTime;
+            }
+        } else {
+            this.y += this.speed * deltaTime;
+        }
+
         this.angle += deltaTime * 2;
         this.pulsePhase += deltaTime * 5;
         if (this.y > canvasHeight + this.height) this.active = false;
@@ -72,13 +88,7 @@ class Powerup {
         }
         ctx.closePath();
         ctx.fill(); 
-        
-        ctx.save();
-        ctx.globalAlpha = 0.3;
-        ctx.lineWidth = 6;
-        ctx.stroke();
-        ctx.restore();
-        
+        ctx.save(); ctx.globalAlpha = 0.3; ctx.lineWidth = 6; ctx.stroke(); ctx.restore();
         ctx.stroke(); 
 
         ctx.rotate(-this.angle);
@@ -131,12 +141,15 @@ class Game {
         this.powerupPool = new ObjectPool(() => new Powerup(), 20);
 
         this.player = null;
+        this.wingman = null; // 【v4.0 新增】僚机实例
         this.bullets = [];
         this.enemyBullets = [];
         this.enemies = [];
         this.powerups = [];
         this.boss = null;
+        
         this.currentPlaneType = 'Ranger';
+        this.currentWingmanType = 'none'; // 【v4.0 新增】僚机配置态
         
         this.playArea = { minX: 0, maxX: window.innerWidth };
         this.interactiveWidth = window.innerWidth;
@@ -223,6 +236,18 @@ class Game {
                 this.planeNameUI.textContent = { 'Ranger': '游骑兵', 'Interceptor': '拦截者', 'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸机' }[this.currentPlaneType] || this.currentPlaneType;
             });
         });
+
+        // 【v4.0 新增：僚机按钮事件】
+        const wingmanBtns = document.querySelectorAll('.wingman-btn');
+        wingmanBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                wingmanBtns.forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentWingmanType = e.target.dataset.type;
+                const names = { 'none': '无僚机', 'defensive': '防御盾卫', 'offensive': '侧翼火力', 'magnetic': '引力磁枢' };
+                document.getElementById('selected-wingman-name').textContent = names[this.currentWingmanType];
+            });
+        });
     }
 
     resize() {
@@ -241,6 +266,9 @@ class Game {
         this.lastTime = performance.now();
         
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.interactiveWidth);
+        // 【v4.0 新增：实例化僚机系统】
+        this.wingman = new Wingman(this.currentWingmanType, this.imageLoader, this.interactiveWidth);
+        
         this.bullets = [];
         this.enemyBullets = [];
         this.enemies = [];
@@ -342,7 +370,10 @@ class Game {
 
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
         
+        // 【v4.0 侧翼火力系统】：联动机炮同步开火
         if (shouldShoot) { 
+            if (this.wingman) this.wingman.shoot(this); 
+            
             const px = this.player.x; const py = this.player.y - this.player.height / 2;
             const bType = this.player.bulletType;
             const pl = this.player.powerLevel || 0;
@@ -369,10 +400,13 @@ class Game {
             }
         }
 
+        // 【v4.0 生命周期挂载】更新僚机系统
+        if (this.wingman) this.wingman.update(this.player, this.deltaTime, this);
+
         const isOutOfBounds = (x, y) => (x < this.playArea.minX || x > this.playArea.maxX || y < 10 || y > this.canvas.height + 10);
 
         this.powerups.forEach(p => {
-            p.update(this.deltaTime, this.canvas.height);
+            p.update(this.deltaTime, this.canvas.height, this.player);
             if (p.active && Math.abs(p.x - this.player.x) < (p.width/2 + this.player.width/2) && Math.abs(p.y - this.player.y) < (p.height/2 + this.player.height/2)) {
                 p.active = false;
                 if (p.type === 'HEALTH') this.player.heal(this.player.maxHp * 0.15);
@@ -391,12 +425,26 @@ class Game {
 
         const hitZoneX = this.player.width * 0.4;
         const hitZoneY = this.player.height * 0.4;
+        
         this.enemyBullets.forEach(b => {
             b.update(this.deltaTime);
-            if (b.active && isOutOfBounds(b.x, b.y)) b.active = false;
-            else if (b.active && Math.abs(b.x - this.player.x) < hitZoneX && Math.abs(b.y - this.player.y) < hitZoneY) {
-                this.handlePlayerDamage(b.damage);
+            if (b.active && isOutOfBounds(b.x, b.y)) {
                 b.active = false;
+            } else if (b.active) {
+                // 【v4.0 防御盾卫系统】：优先进行僚机外围 AABB 拦截
+                if (this.wingman && this.wingman.type === 'defensive' && this.wingman.active) {
+                    const blockRadius = this.wingman.width * 0.8;
+                    if (Math.hypot(b.x - this.wingman.left.x, b.y - this.wingman.left.y) < blockRadius ||
+                        Math.hypot(b.x - this.wingman.right.x, b.y - this.wingman.right.y) < blockRadius) {
+                        b.active = false; // 子弹被力场抵消
+                        return;
+                    }
+                }
+                // 主机判定
+                if (Math.abs(b.x - this.player.x) < hitZoneX && Math.abs(b.y - this.player.y) < hitZoneY) {
+                    this.handlePlayerDamage(b.damage);
+                    b.active = false;
+                }
             }
         });
 
@@ -437,14 +485,9 @@ class Game {
                     Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
                     e.active = false; 
                     if (!this.player.isInvincible) {
-                        // ==========================================
-                        // 【v3.8.0 修改部分：增强受限关卡的碰撞惩罚】
-                        // 为了配合无法击毁的高护甲敌机，调整撞机伤害参数。
-                        // 确保 E2/E3 一旦漏掉发生碰撞，能有效扣除玩家血量，形成通关壁垒。
-                        // ==========================================
-                        let crashDamage = 10;       // E1 轻型撞击扣除极少
-                        if (e.type === 2) crashDamage = 30;  // E2 中型撞击扣除约 10%
-                        if (e.type === 3) crashDamage = 60;  // E3 重型撞击扣除约 20%
+                        let crashDamage = 10;       
+                        if (e.type === 2) crashDamage = 30;  
+                        if (e.type === 3) crashDamage = 60;  
                         this.handlePlayerDamage(crashDamage);
                     }
                 }
@@ -519,6 +562,7 @@ class Game {
         if (this.boss) this.boss.draw(this.ctx);
         this.powerups.forEach(p => p.draw(this.ctx));
         if (this.player) this.player.draw(this.ctx);
+        if (this.wingman) this.wingman.draw(this.ctx); // 【v4.0 挂载僚机渲染】
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemyBullets.forEach(b => b.draw(this.ctx));
         

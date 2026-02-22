@@ -6,7 +6,6 @@ export default class Boss {
         this.bossIndex = Math.min(9, Math.max(1, level - 1));
         this.imageKey = 'b' + this.bossIndex;
         
-        // 【修复 5】基于交互区宽度，Boss 设定为 85% 且按原图比例换算不拉伸
         const interactiveWidth = playArea.maxX - playArea.minX;
         this.width = interactiveWidth * 0.85;
         this.height = this.width * (140 / 180); 
@@ -18,17 +17,38 @@ export default class Boss {
         if (this.bossIndex === 3) baseMultiplier = 1.5; 
         if (this.bossIndex === 1) baseMultiplier = 0.8; 
         if (this.bossIndex === 9) baseMultiplier = 2.5; 
+
+        // ==========================================
+        // 【v4.0 僚机对抗补正与第 10 关极壁】
+        // ==========================================
+        const game = window.gameInstance;
+        
+        // 任何僚机均可使 Boss 基础护甲弱化 20%
+        if (game && game.currentWingmanType !== 'none') {
+            baseMultiplier *= 0.8; 
+        }
+        
+        this.speed = 100 + level * 5;
+        this.attackInterval = this.bossIndex === 1 ? 1.0 : 2.0; 
+
+        // 最终帝王挑战的硬件防火墙
+        if (level === 10) {
+            if (game && (game.currentPlaneType !== 'VoidBomber' || game.currentWingmanType !== 'magnetic')) {
+                baseMultiplier *= 500; // 绝对斩杀线：500倍血量封死
+                this.speed *= 3;
+                this.attackInterval = 0.1; // 极密弹幕网
+            }
+        }
+        // ==========================================
         
         this.maxHealth = 2800 * Math.pow(1.2, powerLevel) * baseMultiplier;
         this.health = this.maxHealth;
-        this.speed = 100 + level * 5;
         
         this.x = (playArea.maxX - playArea.minX) / 2 + playArea.minX;
         this.y = -this.height; 
         
         this.phase = 1;
         this.attackTimer = 0;
-        this.attackInterval = this.bossIndex === 1 ? 1.0 : 2.0; 
         this.moveTimer = 0;
         this.targetX = this.x;
         
