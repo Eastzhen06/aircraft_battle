@@ -1,37 +1,24 @@
 export default class Bullet {
     constructor(x, y, speed, damage, type = 'straight', angleOffset = 0) {
-        this.x = x;
-        this.y = y;
-        this.speed = speed;
-        this.damage = damage;
-        this.type = type;
-        this.angleOffset = angleOffset;
+        this.x = x; this.y = y;
+        this.speed = speed; this.damage = damage;
+        this.type = type; this.angleOffset = angleOffset;
         this.active = true;
         
         this.state = 'FLYING'; 
         this.timer = 0;        
         this.maxExplosionRadius = 150; 
 
-        if (type === 'pierce') {
-            this.width = 10; this.height = 30; this.color = '#ff0055'; this.isPiercing = true;
-        } else if (type === 'spread') {
-            this.width = 4; this.height = 10; this.color = '#ffff00'; this.isPiercing = false;
-        } else if (type === 'bomb') {
-            this.width = 20; this.height = 20; this.color = '#9900ff'; this.isPiercing = false; 
-        } else if (type === 'enemy') {
-            this.width = 6; this.height = 12; this.color = '#ff5500'; this.isPiercing = false;
-        } else {
-            this.width = 4; this.height = 12; this.color = '#00d4ff'; this.isPiercing = false;
-        }
+        if (type === 'pierce') { this.width = 10; this.height = 30; this.color = '#ff0055'; this.isPiercing = true; }
+        else if (type === 'spread') { this.width = 4; this.height = 10; this.color = '#ffff00'; this.isPiercing = false; }
+        else if (type === 'bomb') { this.width = 20; this.height = 20; this.color = '#9900ff'; this.isPiercing = false; }
+        else if (type === 'enemy') { this.width = 6; this.height = 12; this.color = '#ff5500'; this.isPiercing = false; }
+        else { this.width = 4; this.height = 12; this.color = '#00d4ff'; this.isPiercing = false; }
     }
 
     update(deltaTime) {
         if (this.type === 'bomb') {
-            if (this.state === 'FLYING') {
-                this.y -= this.speed * deltaTime;
-                // 【v3.7 核心修复】彻底剔除基于 this.timer > 1.5 的虚空爆炸
-                // 爆炸命令已转交至 game.js (撞击敌机或飞出屏幕边界时触发)
-            } 
+            if (this.state === 'FLYING') this.y -= this.speed * deltaTime;
             else if (this.state === 'EXPLODING') {
                 this.timer += deltaTime;
                 if (this.timer > 0.5) this.active = false;
@@ -41,9 +28,7 @@ export default class Bullet {
             if (this.angleOffset !== 0) {
                 this.x += Math.sin(this.angleOffset) * this.speed * deltaTime;
                 this.y -= Math.cos(this.angleOffset) * this.speed * deltaTime;
-            } else {
-                this.y -= this.speed * deltaTime;
-            }
+            } else this.y -= this.speed * deltaTime;
         }
     }
 

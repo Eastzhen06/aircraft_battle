@@ -1,13 +1,10 @@
 export default class Enemy {
     constructor() {
         this.active = false;
-        this.width = 40;
-        this.height = 40;
-        this.x = 0;
-        this.y = 0;
+        this.width = 40; this.height = 40;
+        this.x = 0; this.y = 0;
         this.speed = 100;
-        this.health = 10;
-        this.maxHealth = 10;
+        this.health = 10; this.maxHealth = 10;
         this.scoreValue = 100; 
         
         this.movePattern = 'straight';
@@ -19,11 +16,10 @@ export default class Enemy {
         this.shootTimer = 0;
     }
 
-    // 【v3.7】传入 canvasWidth 进行统一规范计算
-    spawn(x, y, level, canvasWidth = window.innerWidth) {
+    // 【OS2】传入 currentPlaneType 用于实施机型关卡卡点壁垒
+    spawn(x, y, level, canvasWidth = window.innerWidth, currentPlaneType = 'Ranger') {
         this.active = true;
-        this.x = x;
-        this.y = y;
+        this.x = x; this.y = y;
         this.originalX = x;
         this.moveTimer = 0;
         this.angle = 0;
@@ -32,31 +28,42 @@ export default class Enemy {
         const rand = Math.random();
         if (rand < 0.6) {
             this.type = 1; this.imageKey = 'e1';
-            // 【v3.7】e1 调整为 12%
-            this.width = canvasWidth * 0.12; 
+            this.width = canvasWidth * 0.08; // 小型改 8%
             this.height = this.width;
             this.maxHealth = 10 * level;
             this.speed = 150 + level * 10;
             this.scoreValue = 100;
         } else if (rand < 0.9) {
             this.type = 2; this.imageKey = 'e2';
-            // 【v3.7】e2 调整为 18%
-            this.width = canvasWidth * 0.18; 
+            this.width = canvasWidth * 0.12; // 中型改 12%
             this.height = this.width;
             this.maxHealth = 30 * level;
             this.speed = 100 + level * 5;
             this.scoreValue = 300;
         } else {
             this.type = 3; this.imageKey = 'e3';
-            // 【v3.7】e3 调整为 25%
-            this.width = canvasWidth * 0.25; 
+            this.width = canvasWidth * 0.17; // 大型改 17%
             this.height = this.width;
             this.maxHealth = 80 * level;
             this.speed = 70 + level * 2;
             this.scoreValue = 800;
         }
-        this.health = this.maxHealth;
 
+        // ==========================================
+        // 【OS2 系统级缩放】绝对属性卡点壁垒
+        // ==========================================
+        // 规则1：游骑兵，第4关必须绝对无法通过 (血量极高，速度激增)
+        if (level === 4 && currentPlaneType === 'Ranger') {
+            this.maxHealth *= 15; // 数值墙：超过极限DPS
+            this.speed *= 1.8;
+        }
+        // 规则2：重装堡垒，第8关必须绝对无法通过
+        if (level === 8 && currentPlaneType === 'Fortress') {
+            this.maxHealth *= 20; 
+            this.speed *= 2.2; 
+        }
+
+        this.health = this.maxHealth;
         const patterns = ['straight', 'zigzag', 'sine', 'diagonal'];
         this.movePattern = patterns[Math.floor(Math.random() * patterns.length)];
     }
@@ -111,7 +118,6 @@ export default class Enemy {
 
     draw(ctx) {
         if (!this.active) return;
-
         const img = window.imageLoader ? window.imageLoader.get(this.imageKey) : null;
         
         if (img) {
@@ -125,7 +131,7 @@ export default class Enemy {
             const healthPercent = this.health / this.maxHealth;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(this.x - this.width / 2, this.y - this.height / 2 - 10, this.width, 4);
-            ctx.fillStyle = '#ff4444';
+            ctx.fillStyle = '#00d4ff'; // OS2 护盾蓝
             ctx.fillRect(this.x - this.width / 2, this.y - this.height / 2 - 10, this.width * healthPercent, 4);
         }
     }

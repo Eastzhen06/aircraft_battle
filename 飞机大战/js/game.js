@@ -20,6 +20,73 @@ const CAMPAIGN_LEVELS = [
     { level: 10, name: '帝王', desc: '最终战: 帝王' }
 ];
 
+// 【OS2 新增】科幻六边形脉冲掉落道具
+class Powerup {
+    constructor() {
+        this.active = false;
+        this.x = 0; this.y = 0;
+        this.width = 40; this.height = 40;
+        this.type = 'HEALTH'; 
+        this.speed = 100;
+        this.angle = 0;
+        this.pulsePhase = 0;
+    }
+    spawn(x, y) {
+        this.active = true;
+        this.x = x; this.y = y;
+        const r = Math.random();
+        if (r < 0.33) this.type = 'HEALTH';
+        else if (r < 0.66) this.type = 'POWER';
+        else this.type = 'SHIELD';
+    }
+    update(deltaTime, canvasHeight) {
+        if (!this.active) return;
+        this.y += this.speed * deltaTime;
+        this.angle += deltaTime * 2;
+        this.pulsePhase += deltaTime * 5;
+        if (this.y > canvasHeight + this.height) this.active = false;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const pulse = 1 + Math.sin(this.pulsePhase) * 0.1;
+        ctx.scale(pulse, pulse);
+        ctx.rotate(this.angle);
+
+        let color, symbol;
+        if (this.type === 'HEALTH') { color = '#00FF44'; symbol = '✚'; } 
+        else if (this.type === 'POWER') { color = '#FF4400'; symbol = '⚡'; } 
+        else if (this.type === 'SHIELD') { color = '#00CCFF'; symbol = '⛨'; }
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15;
+
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI * 2 / 6) * i - Math.PI / 2;
+            const px = Math.cos(angle) * (this.width / 2);
+            const py = Math.sin(angle) * (this.height / 2);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        ctx.rotate(-this.angle);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = color;
+        ctx.font = `bold ${this.width * 0.5}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(symbol, 0, 0);
+        ctx.restore();
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -60,11 +127,13 @@ class Game {
         this.playerBulletPool = new ObjectPool(() => new Bullet(0, 0, 0, 0, 'straight'), 200);
         this.enemyBulletPool = new ObjectPool(() => new Bullet(0, 0, 0, 0, 'enemy'), 200);
         this.enemyPool = new ObjectPool(() => new Enemy(), 60);
+        this.powerupPool = new ObjectPool(() => new Powerup(), 20);
 
         this.player = null;
         this.bullets = [];
         this.enemyBullets = [];
         this.enemies = [];
+        this.powerups = [];
         this.boss = null;
         this.currentPlaneType = 'Ranger';
         
@@ -72,7 +141,6 @@ class Game {
     }
 
     init() {
-        console.log("Initializing game v3.7.0 (SOTA Vision & Dynamic Bounds)...");
         window.imageLoader = this.imageLoader;
         window.gameInstance = this;
 
@@ -83,7 +151,7 @@ class Game {
         
         if (this.imageLoader.load) {
             this.imageLoader.load(ASSET_SOURCES, () => {
-                console.log("Assets loaded. Ready.");
+                console.log("Assets loaded. OS2 Ready.");
             });
         }
     }
@@ -159,7 +227,7 @@ class Game {
                 planeBtns.forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
                 this.currentPlaneType = e.target.dataset.type;
-                this.planeNameUI.textContent = { 'Ranger': '游骑兵', 'Interceptor': '拦截者', 'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸' }[this.currentPlaneType] || this.currentPlaneType;
+                this.planeNameUI.textContent = { 'Ranger': '游骑兵', 'Interceptor': '拦截者', 'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸机' }[this.currentPlaneType] || this.currentPlaneType;
             });
         });
     }
@@ -179,11 +247,11 @@ class Game {
         this.score = 0; 
         this.lastTime = performance.now();
         
-        // 【v3.7】传入 canvasWidth 进行精确的初始化
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.canvas.width);
         this.bullets = [];
         this.enemyBullets = [];
         this.enemies = [];
+        this.powerups = [];
         this.boss = null;
         
         this.levelSystem = new LevelSystem();
@@ -216,7 +284,6 @@ class Game {
         
         this.deltaTime = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
-        
         if (this.deltaTime > 0) this.fps = this.fps * 0.9 + (1 / this.deltaTime) * 0.1;
 
         this.update();
@@ -243,8 +310,7 @@ class Game {
         const b = this.enemyBulletPool.get();
         b.x = x; b.y = y; b.speed = -speed; 
         b.damage = damage; b.type = 'enemy'; b.angleOffset = angle; b.state = 'FLYING'; b.timer = 0;
-        b.width = isLaser ? 8 : 6;
-        b.height = isLaser ? 25 : 6;
+        b.width = isLaser ? 8 : 6; b.height = isLaser ? 25 : 6;
         b.color = isLaser ? '#ff00ff' : '#ff5500';
         b.isPiercing = isLaser;
         if (!this.enemyBullets.includes(b)) this.enemyBullets.push(b);
@@ -261,7 +327,6 @@ class Game {
                 this.player.triggerBlink(); 
                 this.enemyBullets.forEach(b => b.active = false);
             } else {
-                console.log("GAME OVER");
                 this.state = 'GAME_OVER';
                 alert("战斗失败！请刷新页面重新开始。");
             }
@@ -281,27 +346,52 @@ class Game {
         }
 
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
-        if (shouldShoot && !this.player.isBlinking) { 
+        
+        // 【OS2 核心修复】解除 isBlinking 开火锁，无敌闪烁期间允许全面反击
+        if (shouldShoot) { 
             const px = this.player.x; const py = this.player.y - this.player.height / 2;
             const bType = this.player.bulletType;
-            if (bType === 'straight') { this.spawnBullet(px-10, py, 800, 10, 'straight'); this.spawnBullet(px+10, py, 800, 10, 'straight'); } 
-            else if (bType === 'spread') { this.spawnBullet(px, py, 800, 6, 'spread', -0.2); this.spawnBullet(px, py, 800, 6, 'spread', 0); this.spawnBullet(px, py, 800, 6, 'spread', 0.2); } 
-            else if (bType === 'pierce') { this.spawnBullet(px, py, 600, 25, 'pierce'); } 
-            else if (bType === 'bomb') { this.spawnBullet(px, py, 200, 40, 'bomb'); }
+            const pl = this.player.powerLevel || 0;
+            
+            if (bType === 'straight') { 
+                this.spawnBullet(px-10, py, 800, 10, 'straight'); this.spawnBullet(px+10, py, 800, 10, 'straight'); 
+                if (pl >= 1) { this.spawnBullet(px-25, py+10, 800, 10, 'straight'); this.spawnBullet(px+25, py+10, 800, 10, 'straight'); }
+                if (pl >= 2) { this.spawnBullet(px, py-10, 800, 15, 'straight'); }
+            } 
+            else if (bType === 'spread') { 
+                this.spawnBullet(px, py, 800, 6, 'spread', -0.2); this.spawnBullet(px, py, 800, 6, 'spread', 0); this.spawnBullet(px, py, 800, 6, 'spread', 0.2); 
+                if (pl >= 1) { this.spawnBullet(px, py+10, 800, 6, 'spread', -0.4); this.spawnBullet(px, py+10, 800, 6, 'spread', 0.4); }
+                if (pl >= 2) { this.spawnBullet(px-15, py, 800, 6, 'spread', -0.1); this.spawnBullet(px+15, py, 800, 6, 'spread', 0.1); }
+            } 
+            else if (bType === 'pierce') { 
+                this.spawnBullet(px, py, 600, 25, 'pierce'); 
+                if (pl >= 1) { this.spawnBullet(px-20, py+10, 600, 25, 'pierce'); this.spawnBullet(px+20, py+10, 600, 25, 'pierce'); }
+                if (pl >= 2) { this.spawnBullet(px-40, py+20, 600, 25, 'pierce'); this.spawnBullet(px+40, py+20, 600, 25, 'pierce'); }
+            } 
+            else if (bType === 'bomb') { 
+                this.spawnBullet(px, py, 200, 40, 'bomb'); 
+                if (pl >= 1) { this.spawnBullet(px-30, py+15, 200, 40, 'bomb'); this.spawnBullet(px+30, py+15, 200, 40, 'bomb'); }
+                if (pl >= 2) { this.spawnBullet(px, py-20, 200, 60, 'bomb'); }
+            }
         }
 
-        // 【v3.7 核心修复】加入了 Y 轴判断，飞出上框边缘立刻触发爆炸特效
         const isOutOfBounds = (x, y) => (x < this.playArea.minX || x > this.playArea.maxX || y < 10 || y > this.canvas.height + 10);
+
+        this.powerups.forEach(p => {
+            p.update(this.deltaTime, this.canvas.height);
+            if (p.active && Math.abs(p.x - this.player.x) < (p.width/2 + this.player.width/2) && Math.abs(p.y - this.player.y) < (p.height/2 + this.player.height/2)) {
+                p.active = false;
+                if (p.type === 'HEALTH') this.player.heal(this.player.maxHp * 0.15);
+                else if (p.type === 'POWER') this.player.increasePower();
+                else if (p.type === 'SHIELD') this.player.shieldCount++;
+            }
+        });
 
         this.bullets.forEach(b => {
             b.update(this.deltaTime);
             if (b.active && b.state === 'FLYING' && isOutOfBounds(b.x, b.y)) {
-                if (b.type === 'bomb') {
-                    b.state = 'EXPLODING';
-                    b.timer = 0; 
-                } else {
-                    b.active = false;
-                }
+                if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } 
+                else b.active = false;
             }
         });
 
@@ -309,9 +399,8 @@ class Game {
         const hitZoneY = this.player.height * 0.4;
         this.enemyBullets.forEach(b => {
             b.update(this.deltaTime);
-            if (b.active && isOutOfBounds(b.x, b.y)) {
-                b.active = false;
-            } else if (b.active && Math.abs(b.x - this.player.x) < hitZoneX && Math.abs(b.y - this.player.y) < hitZoneY) {
+            if (b.active && isOutOfBounds(b.x, b.y)) b.active = false;
+            else if (b.active && Math.abs(b.x - this.player.x) < hitZoneX && Math.abs(b.y - this.player.y) < hitZoneY) {
                 this.handlePlayerDamage(b.damage);
                 b.active = false;
             }
@@ -321,24 +410,38 @@ class Game {
             e.update(this.deltaTime, this.canvas.height, this.playArea, this);
             if (e.active) {
                 this.bullets.forEach(b => {
-                    // 【v3.7 核心修复】只判断状态为 FLYING 的子弹，并且碰撞时立刻引爆炸弹
-                    if (b.active && b.state === 'FLYING' && Math.abs(b.x - e.x) < (e.width/2 + b.width/2) && Math.abs(b.y - e.y) < (e.height/2 + b.height/2)) {
-                        const killed = e.takeDamage(b.damage);
-                        
+                    if (b.active && b.state === 'FLYING') {
+                        let collision = false;
+                        // 【OS2 核心修复】虚空轰炸机子弹采用 0.7(实体) 与 0.5(子弹) 的缩放系数，杜绝空气墙爆炸
                         if (b.type === 'bomb') {
-                            b.state = 'EXPLODING';
-                            b.timer = 0; // 撞到敌机立马爆炸
-                        } else if (!b.isPiercing) {
-                            b.active = false;
+                            const collX = (e.width/2 * 0.7) + (b.width/2 * 0.5);
+                            const collY = (e.height/2 * 0.7) + (b.height/2 * 0.5);
+                            collision = Math.abs(b.x - e.x) < collX && Math.abs(b.y - e.y) < collY;
+                        } else {
+                            collision = Math.abs(b.x - e.x) < (e.width/2 + b.width/2) && Math.abs(b.y - e.y) < (e.height/2 + b.height/2);
                         }
-                        
-                        if (killed) { this.skillSystem.addEnergy(10); this.score += e.scoreValue; }
+
+                        if (collision) {
+                            const killed = e.takeDamage(b.damage);
+                            if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } 
+                            else if (!b.isPiercing) { b.active = false; }
+                            
+                            if (killed) { 
+                                this.skillSystem.addEnergy(10); 
+                                this.score += e.scoreValue; 
+                                // 【OS2 掉落机制】击杀 E3 掉落科技箱
+                                if (e.type === 3) {
+                                    const p = this.powerupPool.get();
+                                    p.spawn(e.x, e.y);
+                                    if (!this.powerups.includes(p)) this.powerups.push(p);
+                                }
+                            }
+                        }
                     }
                 });
 
                 if (Math.abs(e.x - this.player.x) < (e.width/2 + this.player.width/2 * 0.8) && 
                     Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
-                    
                     e.active = false; 
                     if (!this.player.isInvincible) {
                         let crashDamage = 5;
@@ -354,18 +457,23 @@ class Game {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
             if (this.boss.shouldShoot()) this.boss.shoot(this);
             this.bullets.forEach(b => {
-                // 【v3.7 核心修复】只判断状态为 FLYING 的子弹，撞击 Boss 立刻引爆
-                if (b.active && b.state === 'FLYING' && Math.abs(b.x - this.boss.x) < (this.boss.width/2 + b.width/2) && Math.abs(b.y - this.boss.y) < (this.boss.height/2 + b.height/2)) {
-                    const bossKilled = this.boss.takeDamage(b.damage);
-                    
+                if (b.active && b.state === 'FLYING') {
+                    let collision = false;
+                    // 【OS2 核心修复】对 Boss 的轰炸同样应用收缩机制
                     if (b.type === 'bomb') {
-                        b.state = 'EXPLODING';
-                        b.timer = 0; // 撞到Boss立刻引爆
-                    } else if (!b.isPiercing) {
-                        b.active = false;
+                        const collX = (this.boss.width/2 * 0.7) + (b.width/2 * 0.5);
+                        const collY = (this.boss.height/2 * 0.7) + (b.height/2 * 0.5);
+                        collision = Math.abs(b.x - this.boss.x) < collX && Math.abs(b.y - this.boss.y) < collY;
+                    } else {
+                        collision = Math.abs(b.x - this.boss.x) < (this.boss.width/2 + b.width/2) && Math.abs(b.y - this.boss.y) < (this.boss.height/2 + b.height/2);
                     }
-                    
-                    if (bossKilled) this.score += this.boss.scoreValue;
+
+                    if (collision) {
+                        const bossKilled = this.boss.takeDamage(b.damage);
+                        if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } 
+                        else if (!b.isPiercing) { b.active = false; }
+                        if (bossKilled) this.score += this.boss.scoreValue;
+                    }
                 }
             });
         }
@@ -388,14 +496,12 @@ class Game {
         if (hpFill) {
             const hpPct = Math.max(0, this.player.hp / this.player.maxHp) * 100;
             hpFill.style.width = `${hpPct}%`;
-            hpFill.style.background = hpPct > 30 ? '#0f0' : '#f00';
+            hpFill.style.background = hpPct > 30 ? 'linear-gradient(90deg, #ff0055, #00d4ff)' : '#ff0055';
         }
     }
 
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.fillStyle = '#0a0a1a';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         this.ctx.save();
         this.ctx.setLineDash([5, 15]);
@@ -414,6 +520,7 @@ class Game {
 
         this.enemies.forEach(e => e.draw(this.ctx));
         if (this.boss) this.boss.draw(this.ctx);
+        this.powerups.forEach(p => p.draw(this.ctx));
         if (this.player) this.player.draw(this.ctx);
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemyBullets.forEach(b => b.draw(this.ctx));
@@ -424,19 +531,13 @@ class Game {
     drawPerformanceMonitor() {
         const x = this.canvas.width - 150;
         const y = this.canvas.height - 60;
-        this.ctx.font = '12px Courier New';
+        this.ctx.font = '12px Orbitron, Courier New';
         this.ctx.textAlign = 'left';
         
-        this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00ff00';
+        this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00d4ff';
         this.ctx.fillText(`FPS: ${Math.round(this.fps)}`, x, y);
-        this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00ff00';
+        this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00d4ff';
         this.ctx.fillText(`FT:  ${this.frameTime.toFixed(1)}ms`, x, y + 15);
-        
-        const pbActive = this.playerBulletPool.pool.filter(o => o.active).length;
-        const ebActive = this.enemyBulletPool.pool.filter(o => o.active).length;
-        this.ctx.fillStyle = '#00d4ff';
-        this.ctx.fillText(`P-Bul: ${pbActive}/${this.playerBulletPool.pool.length}`, x, y + 30);
-        this.ctx.fillText(`E-Bul: ${ebActive}/${this.enemyBulletPool.pool.length}`, x, y + 45);
     }
 }
 

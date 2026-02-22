@@ -19,7 +19,8 @@ export default class LevelSystem {
                 console.log(`⚠️ LEVEL ${this.level} - BOSS APPROACHING!`);
                 game.enemies.forEach(e => e.active = false);
             } 
-            else if (this.spawnTimer > Math.max(0.5, 1.5 - this.level * 0.1)) {
+            // 【OS2 修复】释放大招期间，系统绝对不生成并放入新的敌机
+            else if (this.spawnTimer > Math.max(0.5, 1.5 - this.level * 0.1) && game.skillSystem.state !== 'ACTIVE') {
                 this.spawnTimer = 0;
                 this.spawnNormalEnemy(game);
             }
@@ -54,8 +55,8 @@ export default class LevelSystem {
         const maxX = game.playArea.maxX - margin;
         const spawnX = Math.random() * (maxX - minX) + minX;
         
-        // 【v3.7】传入 game.canvas.width，赋予小怪读取百分比的权利
-        enemy.spawn(spawnX, -50, this.level, game.canvas.width);
+        // 【OS2 升级】传入 canvasWidth 与 currentPlaneType，触发绝对属性壁垒
+        enemy.spawn(spawnX, -50, this.level, game.canvas.width, game.currentPlaneType);
         if (!game.enemies.includes(enemy)) {
             game.enemies.push(enemy);
         }

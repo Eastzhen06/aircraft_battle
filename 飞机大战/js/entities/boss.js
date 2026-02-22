@@ -6,10 +6,10 @@ export default class Boss {
         this.bossIndex = Math.min(9, Math.max(1, level - 1));
         this.imageKey = 'b' + this.bossIndex;
         
-        // 【v3.7 重构】获取安全交互区宽度，强制 Boss 填充至 80%
+        // 【OS2 重构】Boss 占比调整为 70%
         const interactiveWidth = playArea.maxX - playArea.minX;
-        this.width = interactiveWidth * 0.80;
-        this.height = this.width * (140 / 180); // 维持原有宽扁造型的像素比
+        this.width = interactiveWidth * 0.70;
+        this.height = this.width * (140 / 180); 
         
         this.scoreValue = 5000 * level; 
         
@@ -167,20 +167,27 @@ export default class Boss {
             ctx.fillRect(this.x - this.width/2, this.y - this.height/2, this.width, this.height);
         }
         
+        // 【OS2 核心修复】Boss 血量条绝对置顶，脱离实体坐标绑定
         const healthPercent = this.health / this.maxHealth;
-        const barWidth = this.width;
-        const barHeight = 8;
-        
+        const barWidth = 600;
+        const barHeight = 15;
+        const canvasWidth = ctx.canvas.width;
+        const screenX = canvasWidth / 2 - barWidth / 2;
+        const screenY = 20; // 屏幕最上方
+
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(this.x - barWidth / 2, this.y - this.height / 2 - 20, barWidth, barHeight);
+        ctx.fillRect(screenX, screenY, barWidth, barHeight);
+        ctx.strokeStyle = '#00d4ff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(screenX, screenY, barWidth, barHeight);
         
-        const healthColor = healthPercent > 0.5 ? '#44ff44' : healthPercent > 0.25 ? '#ffff44' : '#ff4444';
+        const healthColor = healthPercent > 0.5 ? '#44ff44' : healthPercent > 0.25 ? '#ffff44' : '#ff0055';
         ctx.fillStyle = healthColor;
-        ctx.fillRect(this.x - barWidth / 2, this.y - this.height / 2 - 20, barWidth * healthPercent, barHeight);
+        ctx.fillRect(screenX, screenY, barWidth * healthPercent, barHeight);
         
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 12px Orbitron, Arial';
+        ctx.font = 'bold 14px Orbitron, Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(`BOSS Lv.${this.bossIndex} - Phase ${this.phase}`, this.x, this.y - this.height / 2 - 25);
+        ctx.fillText(`BOSS Lv.${this.bossIndex} - Phase ${this.phase}`, canvasWidth / 2, screenY + 12);
     }
 }

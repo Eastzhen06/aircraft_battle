@@ -1,7 +1,3 @@
-// ============================================================================
-// js/engine/gestureWorker.js - 终极修复版 (完全对齐主线程协议)
-// ============================================================================
-
 const vec2 = { dist: (v1, v2) => Math.hypot(v1.x - v2.x, v1.y - v2.y) };
 
 class OneEuroFilter {
@@ -14,9 +10,6 @@ class OneEuroFilter {
     i(a,b){const c=1/(2*Math.PI*b);return a/(a+c);}
 }
 
-// ============================================================================
-// 【全局挂载与自动点火】
-// ============================================================================
 let handLandmarker = null;
 let lastProcessedTime = -1; 
 
@@ -24,24 +17,14 @@ import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3").then(async
     try {
         const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
         handLandmarker = await vision.HandLandmarker.createFromOptions(resolver, {
-            baseOptions: {
-                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-                delegate: "GPU"
-            },
-            runningMode: "VIDEO",
-            numHands: 1
+            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", delegate: "GPU" },
+            runningMode: "VIDEO", numHands: 1
         });
         console.log("[Worker] 视觉引擎加载完毕，系统上线。");
-        // 【核心修复 1】: 握手协议，告诉 gesture.js 的 workerReady 可以开启了
         self.postMessage({ type: 'INIT_DONE' }); 
-    } catch (error) {
-        console.error("[Worker] 视觉引擎加载失败:", error);
-    }
+    } catch (error) { console.error("[Worker] 视觉引擎加载失败:", error); }
 }).catch(err => console.error("[Worker] 模块请求失败:", err));
 
-// ============================================================================
-// 【核心高精度黑盒】
-// ============================================================================
 function analyzeHand(rawLandmarks, timestamp) {
     if (typeof analyzeHand.lastTipY === 'undefined') analyzeHand.lastTipY = 0;
     if (typeof analyzeHand.isRecoilLocked === 'undefined') analyzeHand.isRecoilLocked = false;
@@ -51,6 +34,7 @@ function analyzeHand(rawLandmarks, timestamp) {
         self.filtersY = Array(21).fill(0).map(() => new OneEuroFilter(1.0, 0.001));
     }
 
+    // 保留原始的 z 坐标用于高维判定
     const sP = rawLandmarks.map((p, i) => ({
         x: self.filtersX[i].filter(p.x, timestamp),
         y: self.filtersY[i].filter(p.y, timestamp),
@@ -59,10 +43,17 @@ function analyzeHand(rawLandmarks, timestamp) {
 
     const wrist = sP[0];
     const palmLength = Math.hypot(sP[0].x - sP[9].x, sP[0].y - sP[9].y) || 0.001;
-    const getDist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    const getDist2D = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
     
-    const isStraight = (tip, pip) => getDist(sP[tip], wrist) > getDist(sP[pip], wrist);
-    const isCurled = (tip, pip) => getDist(sP[tip], wrist) < getDist(sP[pip], wrist);
+    // 【OS2 防误触优化】2D 距离 + Z轴深度特判 (Override)
+    const isStraight = (tip, pip) => {
+        // 条件1: 正常的 2D 伸直判定
+        if (getDist2D(sP[tip], wrist) > getDist2D(sP[pip], wrist)) return true;
+        // 条件2: 空间透视补偿。指尖比PIP关节更靠近屏幕至少 0.04 个相对深度单位
+        if (sP[tip].z < sP[pip].z - 0.04) return true;
+        return false;
+    };
+    const isCurled = (tip, pip) => !isStraight(tip, pip);
 
     const isIndexUp = isStraight(8, 6);
     const isMiddleCurled = isCurled(12, 10);
@@ -86,6 +77,8 @@ function analyzeHand(rawLandmarks, timestamp) {
     } else if (isFist) {
         finalGesture = 'FIST';
         analyzeHand.isRecoilLocked = false;
+    } else {
+        analyzeHand.isRecoilLocked = false; // 重置锁防卡死
     }
 
     analyzeHand.lastTipY = currentTipY;
@@ -93,13 +86,10 @@ function analyzeHand(rawLandmarks, timestamp) {
     return {
         gesture: finalGesture,
         fingerStates: [isStraight(4,3), isIndexUp, !isMiddleCurled, !isRingCurled, !isPinkyCurled],
-        landmarks: sP // 【核心修复 2】: 变量名严格改回 landmarks，主线程就能抓取到坐标了
+        landmarks: sP 
     };
 }
 
-// ============================================================================
-// 【防拥堵通讯管道】
-// ============================================================================
 self.onmessage = (e) => {
     if (e.data.type === 'PROCESS_FRAME') {
         const { image, timestamp } = e.data;
@@ -110,14 +100,12 @@ self.onmessage = (e) => {
                 isDetected: isDetected,
                 gesture: data ? data.gesture : 'IDLE',
                 fingerStates: data ? data.fingerStates : [false,false,false,false,false],
-                landmarks: data ? data.landmarks : null // 【核心修复 2】: 严格对应
+                landmarks: data ? data.landmarks : null 
             });
             if (image && image.close) image.close(); 
         };
 
-        if (!handLandmarker) {
-            return sendUnlockMessage(false, null);
-        }
+        if (!handLandmarker) return sendUnlockMessage(false, null);
 
         try {
             let safeTimestamp = timestamp;
@@ -133,7 +121,7 @@ self.onmessage = (e) => {
                 sendUnlockMessage(false, null);
             }
         } catch (err) {
-            console.error("[Worker] 视觉分析遭遇异常:", err);
+            console.error("[Worker] 视觉分析异常:", err);
             sendUnlockMessage(false, null);
         }
     }

@@ -9,13 +9,12 @@ export const PLANE_TYPES = {
 };
 
 export default class Player {
-    // 【v3.7 引入 canvasWidth 作为百分比计算基准】
     constructor(x, y, imageLoader, type = 'Ranger', canvasWidth = window.innerWidth) {
         const config = PLANE_TYPES[type];
         this.image = imageLoader.get(config.asset);
         
-        // 【v3.7 重构】全面采用百分比制，玩家战机固定为 18%
-        this.width = canvasWidth * 0.18; 
+        // 【OS2 优化】我方战机占屏比严格修改为 10%
+        this.width = canvasWidth * 0.10; 
         if (this.image && this.image.width > 0) {
             this.height = this.width * (this.image.height / this.image.width);
         } else {
@@ -26,8 +25,7 @@ export default class Player {
         this.y = y;
         
         this.config = config;
-        // 【v3.7 数值平衡】单条血量增加 200% (即原本的 3 倍)
-        this.maxHp = config.hp * 3;
+        this.maxHp = config.hp * 3; // 保持 300% 生存力
         this.hp = this.maxHp;
         this.lives = config.lives;
         
@@ -43,6 +41,9 @@ export default class Player {
         this.shootCooldown = 0;
         this.shootInterval = 1 / 7;
         this.bulletType = config.bulletType;
+        
+        // 【OS2 新增】道具层火力强化系统接口
+        this.powerLevel = 0; 
     }
 
     update(input, deltaTime, canvas, skillSystem) {
@@ -105,20 +106,19 @@ export default class Player {
         this.blinkTimer = 3.0; 
     }
 
+    // OS2 掉落道具接口调用
+    heal(amount) { this.hp = Math.min(this.maxHp, this.hp + amount); }
+    increasePower() { this.powerLevel = Math.min(2, this.powerLevel + 1); }
+
     draw(ctx) {
         if (this.isBlinking && Math.floor(Date.now() / 100) % 2 === 0) return;
 
         if (this.isShieldActive) {
-            // 【v3.7 护盾联动】护盾半径与战机最新百分比宽度强绑定，拒绝穿模
             const shieldRadius = Math.max(this.width, this.height) * 0.55;
             const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
-            ctx.fillStyle = `rgba(0, 180, 255, ${alpha})`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, shieldRadius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = `rgba(0, 255, 255, 0.8)`;
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            ctx.fillStyle = `rgba(0, 212, 255, ${alpha})`;
+            ctx.beginPath(); ctx.arc(this.x, this.y, shieldRadius, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(0, 255, 255, 0.8)`; ctx.lineWidth = 2; ctx.stroke();
         }
 
         if (this.image) {

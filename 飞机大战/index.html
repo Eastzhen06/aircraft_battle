@@ -3,107 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - 手势控制 v3.5</title>
+    <title>飞机大战 - OS2 终极架构</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* 【核心修复】：将开发者面板强制绝对定位，像科幻全息投影一样悬浮在首页正中央 */
+        #admin-debug-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000; /* 极高的层级，保证绝不被遮挡 */
+            background: rgba(10, 15, 30, 0.95);
+            padding: 30px;
+            border: 2px solid #00d4ff;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(0, 212, 255, 0.6), inset 0 0 15px rgba(0, 212, 255, 0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            min-width: 250px;
+        }
+        #admin-debug-panel.hidden {
+            display: none !important;
+        }
+        .modal { z-index: 2500 !important; } /* 登录框层级最高 */
+    </style>
 </head>
 <body>
 
-    <div id="start-screen" class="screen">
-        <div id="account-icon">👤</div>
+    <div id="start-screen" class="screen os2-panel">
+        <div id="account-icon" title="开发者登录" style="font-size: 30px;">👤</div>
         <div class="title-container">
             <h1 class="game-title">飞机大战</h1>
-            <p class="subtitle">手势控制版 v3.5</p>
+            <p class="subtitle">OS2 机甲操控端</p>
         </div>
+        
         <div class="plane-selector">
-            <p style="color:#00d4ff; margin-bottom:10px;">当前机型: <span id="selected-plane-name" style="font-weight:bold; color:white;">游骑兵</span></p>
+            <p style="color:#00d4ff; margin-bottom:10px; font-size: 1.2em;">当前挂载机型: <span id="selected-plane-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">游骑兵</span></p>
         </div>
-        <div id="admin-debug-panel" class="debug-panel hidden">
-            <p style="font-size:12px; color:#aaa; margin-bottom:5px;">-- 开发者调试模式 --</p>
-            <button class="plane-btn active" data-type="Ranger">游骑兵 (普通)</button>
-            <button class="plane-btn" data-type="Interceptor">拦截者 (扇形)</button>
-            <button class="plane-btn" data-type="Fortress">重装堡垒 (穿透)</button>
-            <button class="plane-btn" data-type="VoidBomber">虚空轰炸 (直射)</button>
+        
+        <button id="start-btn" class="btn primary" style="margin-top: 20px; font-size: 1.5em;">进入作战中心</button>
+
+        <div id="admin-debug-panel" class="hidden">
+            <h3 style="color:#00d4ff; margin-top:0; letter-spacing: 2px;">[ 开发者机库 ]</h3>
+            <button class="plane-btn active" data-type="Ranger" style="width: 100%;">游骑兵 (普通)</button>
+            <button class="plane-btn" data-type="Interceptor" style="width: 100%;">拦截者 (扇形)</button>
+            <button class="plane-btn" data-type="Fortress" style="width: 100%;">重装堡垒 (穿透)</button>
+            <button class="plane-btn" data-type="VoidBomber" style="width: 100%;">虚空轰炸机</button>
+            <button id="close-admin-btn" class="btn secondary" style="margin-top: 20px; font-size: 14px; width: 100%;">确认配置并隐藏</button>
         </div>
-        <div class="menu-container">
-            <button id="start-btn" class="menu-btn">开始闯关</button>
-        </div>
-        <div id="dev-modal" class="modal screen hidden">
-            <div class="modal-content">
-                <h2 class="modal-title">开发者登录</h2>
-                <div class="input-group">
-                    <label>账号</label>
-                    <input type="text" id="login-account" placeholder="输入 0001">
-                </div>
-                <div class="input-group">
-                    <label>密码</label>
-                    <input type="password" id="login-password" placeholder="输入 1011">
-                </div>
-                <button id="login-submit-btn" class="menu-btn">登录</button>
-                <button id="dev-modal-close-btn" class="menu-btn secondary" style="margin-top: 10px;">关闭</button>
+    </div>
+
+    <div id="dev-modal" class="modal hidden os2-panel">
+        <div class="modal-content">
+            <h2 style="color: #00d4ff; font-family: 'Orbitron', sans-serif;">SYSTEM LOGIN</h2>
+            <input id="login-account" type="text" placeholder="输入开发者账号">
+            <input id="login-password" type="password" placeholder="输入系统口令">
+            <div style="display: flex; gap: 10px; margin-top: 15px; width: 100%;">
+                <button id="login-submit-btn" class="btn primary" style="flex: 1;">VERIFY</button>
+                <button id="dev-modal-close-btn" class="btn secondary" style="flex: 1;">CANCEL</button>
             </div>
         </div>
     </div>
 
-    <div id="campaign-screen" class="screen hidden">
+    <div id="campaign-screen" class="screen hidden os2-panel">
+        <h2 style="color: #00d4ff; margin-bottom: 20px; text-shadow: 0 0 10px #00d4ff;">选择作战宙域</h2>
         <div class="campaign-content">
-            <h2 style="color: #00d4ff; text-shadow: 0 0 10px #00d4ff; margin-bottom: 20px;">选择关卡</h2>
             <div id="level-grid" class="level-grid"></div>
-            <div class="level-info" id="level-info">
-                <h3 id="level-name">请选择关卡</h3>
-                <p id="level-desc" style="color: #aaa; margin-bottom: 20px;">...</p>
-                <button id="launch-level-btn" class="menu-btn" style="display:none;">出击</button>
-                <button id="back-to-menu-btn" class="menu-btn secondary" style="margin-top: 15px;">返回主菜单</button>
+            <div class="level-details os2-panel">
+                <h3 id="level-name" style="color: #fff;">建立连接...</h3>
+                <p id="level-desc" style="color: #aaa; margin: 20px 0; line-height: 1.5;">请从左侧矩阵选择目标空域。</p>
+                <button id="launch-level-btn" class="btn primary" style="display: none; width: 100%; font-size: 1.2em;">部署出击</button>
+                <button id="back-to-menu-btn" class="btn secondary" style="margin-top: 15px; width: 100%;">断开并返回首页</button>
             </div>
         </div>
     </div>
 
     <div id="game-container" style="display: none;">
         <canvas id="gameCanvas"></canvas>
-        <div id="debug-wrapper" class="debug-wrapper collapsed">
-            <canvas id="debugCanvas" width="240" height="180"></canvas>
-            <div id="debug-toggle-btn" class="toggle-tab">📷</div>
+        
+        <div id="debug-wrapper" class="debug-wrapper os2-panel">
+            <canvas id="debugCanvas"></canvas>
+            <div id="debug-info" class="debug-info">
+                <span id="fps-display">FPS: 0</span> | 
+                <span id="gesture-display">动作: IDLE</span>
+            </div>
+            <div id="finger-states" class="finger-states">
+                <span class="finger" id="finger-T">T</span>
+                <span class="finger" id="finger-I">I</span>
+                <span class="finger" id="finger-M">M</span>
+                <span class="finger" id="finger-R">R</span>
+                <span class="finger" id="finger-P">P</span>
+            </div>
+            <button id="debug-toggle-btn" class="toggle-tab">◀</button>
         </div>
-        <button id="pause-btn">⏸️</button>
-        <div id="pause-screen" class="screen hidden">
-             <div class="pause-content">
-                <h2>游戏暂停</h2>
-                <div class="pause-buttons">
-                    <button id="resume-btn" class="menu-btn">继续游戏</button>
-                    <button id="restart-btn-pause" class="menu-btn secondary">重新开始</button>
-                    <button id="menu-btn-pause" class="menu-btn secondary">返回主菜单</button>
-                </div>
+
+        <button id="pause-btn" class="btn icon-btn" style="position: absolute; top: 15px; right: 15px; z-index: 1000; padding: 10px;">⏸️</button>
+
+        <div id="pause-screen" class="screen hidden os2-panel">
+            <h2 style="color: #00d4ff; text-shadow: 0 0 20px #00d4ff; font-size: 3em;">系统已挂起</h2>
+            <div class="pause-menu" style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
+                <button id="resume-btn" class="btn primary">恢复执行</button>
+                <button id="restart-btn-pause" class="btn warning">重新加载环境</button>
+                <button id="menu-btn-pause" class="btn secondary">强制断开连接</button>
             </div>
         </div>
 
-        <div id="hud" class="hidden">
+        <div id="hud" class="hidden os2-panel">
             <div class="hud-left">
-                <div class="hud-item"><span class="hud-label">关卡</span><span id="level-display" class="hud-value" style="color: #ffaa00;">1</span></div>
-                <div class="hud-item"><span class="hud-label">积分</span><span id="score" class="hud-value">0</span></div>
+                <div class="hud-item"><span class="hud-label">LEVEL</span><span id="level-display" class="hud-value" style="color: #ffaa00;">1</span></div>
+                <div class="hud-item"><span class="hud-label">SCORE</span><span id="score" class="hud-value">0</span></div>
             </div>
             <div class="hud-right">
                 <div class="hud-item" style="justify-content: flex-end;">
-                    <span id="lives-count" class="hud-value" style="color: #ff4444; font-size: 24px;">❤️ x 3</span>
+                    <span id="lives-count" class="hud-value" style="color: #ff0055; font-size: 24px; text-shadow: 0 0 10px #ff0055;">❤️ x 3</span>
                 </div>
                 <div class="hud-item">
-                    <span class="hud-label">生命值</span>
+                    <span class="hud-label">HULL INTEGRITY</span>
                     <div id="health-bar" class="health-bar"><div id="health-fill" class="health-fill"></div></div>
                 </div>
                  <div class="hud-item">
                     <div id="shield-icon-container">
-                        <span class="hud-label">保护罩</span>
-                        <span id="shield-count" class="hud-value" style="color: #00d4ff;">🛡️ x 3</span>
+                        <span class="hud-label">ENERGY SHIELD</span>
+                        <span id="shield-count" class="hud-value" style="color: #00d4ff; text-shadow: 0 0 10px #00d4ff;">🛡️ x 3</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div id="ult-container" class="hidden">
+        <div id="ult-container" class="hidden os2-panel">
             <div id="ult-fill"></div>
             <span id="ult-text">0%</span>
         </div>
     </div>
     
     <script type="module" src="js/game.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const closeAdminBtn = document.getElementById('close-admin-btn');
+            if(closeAdminBtn) {
+                closeAdminBtn.addEventListener('click', () => {
+                    document.getElementById('admin-debug-panel').classList.add('hidden');
+                });
+            }
+        });
+    </script>
 </body>
 </html>
