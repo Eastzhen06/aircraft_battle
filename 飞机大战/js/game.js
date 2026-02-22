@@ -58,7 +58,6 @@ class Powerup {
         else if (this.type === 'POWER') { color = '#FF4400'; symbol = '⚡'; } 
         else if (this.type === 'SHIELD') { color = '#00CCFF'; symbol = '⛨'; }
 
-        // 【修复 2】剔除 ctx.shadowBlur = 15; 拯救掉帧，改用多层半透明描边模拟辉光
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
@@ -74,14 +73,13 @@ class Powerup {
         ctx.closePath();
         ctx.fill(); 
         
-        // 伪辉光
         ctx.save();
         ctx.globalAlpha = 0.3;
         ctx.lineWidth = 6;
         ctx.stroke();
         ctx.restore();
         
-        ctx.stroke(); // 内层实线
+        ctx.stroke(); 
 
         ctx.rotate(-this.angle);
         ctx.fillStyle = color;
@@ -188,7 +186,6 @@ class Game {
         const minX = 260; 
         const maxX = this.canvas.width - 320;
         this.playArea = { minX, maxX };
-        // 【修复 5】基于安全交互区宽度计算比例
         this.interactiveWidth = maxX - minX;
     }
 
@@ -243,7 +240,6 @@ class Game {
         this.score = 0; 
         this.lastTime = performance.now();
         
-        // 传入 interactiveWidth 而非全屏宽度
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.interactiveWidth);
         this.bullets = [];
         this.enemyBullets = [];
@@ -256,6 +252,15 @@ class Game {
         this.skillSystem.init(); 
 
         const video = document.createElement('video');
+        
+        // ==========================================
+        // 【v3.7.8 修改部分：强制移动端 Webkit 内联播放】
+        // 彻底解决 iOS/微信环境等移动端浏览器下，视频流被系统后台挂起或被原生播放器劫持导致的“有权限但黑屏”问题。
+        // ==========================================
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
+        // ==========================================
+        
         video.style.display = 'none';
         document.body.appendChild(video);
         this.gestureEngine.init(video, document.getElementById('debugCanvas'), this.canvas);
@@ -425,7 +430,6 @@ class Game {
                                 this.skillSystem.addEnergy(10); 
                                 this.score += e.scoreValue; 
                                 
-                                // 【修复 3】E3 必掉，E2 40%概率掉落
                                 if (e.type === 3 || (e.type === 2 && Math.random() < 0.4)) {
                                     const p = this.powerupPool.get();
                                     p.spawn(e.x, e.y);
