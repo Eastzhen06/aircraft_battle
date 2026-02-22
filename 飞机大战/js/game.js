@@ -252,15 +252,8 @@ class Game {
         this.skillSystem.init(); 
 
         const video = document.createElement('video');
-        
-        // ==========================================
-        // 【v3.7.8 修改部分：强制移动端 Webkit 内联播放】
-        // 彻底解决 iOS/微信环境等移动端浏览器下，视频流被系统后台挂起或被原生播放器劫持导致的“有权限但黑屏”问题。
-        // ==========================================
         video.setAttribute('playsinline', '');
         video.setAttribute('webkit-playsinline', '');
-        // ==========================================
-        
         video.style.display = 'none';
         document.body.appendChild(video);
         this.gestureEngine.init(video, document.getElementById('debugCanvas'), this.canvas);
@@ -444,9 +437,14 @@ class Game {
                     Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
                     e.active = false; 
                     if (!this.player.isInvincible) {
-                        let crashDamage = 5;
-                        if (e.type === 2) crashDamage = 15;
-                        if (e.type === 3) crashDamage = 30;
+                        // ==========================================
+                        // 【v3.8.0 修改部分：增强受限关卡的碰撞惩罚】
+                        // 为了配合无法击毁的高护甲敌机，调整撞机伤害参数。
+                        // 确保 E2/E3 一旦漏掉发生碰撞，能有效扣除玩家血量，形成通关壁垒。
+                        // ==========================================
+                        let crashDamage = 10;       // E1 轻型撞击扣除极少
+                        if (e.type === 2) crashDamage = 30;  // E2 中型撞击扣除约 10%
+                        if (e.type === 3) crashDamage = 60;  // E3 重型撞击扣除约 20%
                         this.handlePlayerDamage(crashDamage);
                     }
                 }

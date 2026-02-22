@@ -16,7 +16,6 @@ export default class Enemy {
         this.shootTimer = 0;
     }
 
-    // 接收 interactiveWidth 作为基准
     spawn(x, y, level, interactiveWidth = window.innerWidth, currentPlaneType = 'Ranger') {
         this.active = true;
         this.x = x; this.y = y;
@@ -26,36 +25,43 @@ export default class Enemy {
         this.shootTimer = Math.random() * 1.5; 
 
         const rand = Math.random();
+        // 【修改点】：剥离所有 + level * n 的速度增量，实施绝对恒定速度
         if (rand < 0.6) {
             this.type = 1; this.imageKey = 'e1';
-            this.width = interactiveWidth * 0.08; // 8%
+            this.width = interactiveWidth * 0.08; 
             this.height = this.width;
             this.maxHealth = 10 * level;
-            this.speed = 150 + level * 10;
+            this.speed = 150; // 绝对恒定
             this.scoreValue = 100;
         } else if (rand < 0.9) {
             this.type = 2; this.imageKey = 'e2';
-            this.width = interactiveWidth * 0.12; // 12%
+            this.width = interactiveWidth * 0.12; 
             this.height = this.width;
             this.maxHealth = 30 * level;
-            this.speed = 100 + level * 5;
+            this.speed = 110; // 绝对恒定
             this.scoreValue = 300;
         } else {
             this.type = 3; this.imageKey = 'e3';
-            this.width = interactiveWidth * 0.17; // 17%
+            this.width = interactiveWidth * 0.17; 
             this.height = this.width;
             this.maxHealth = 80 * level;
-            this.speed = 70 + level * 2;
+            this.speed = 80;  // 绝对恒定
             this.scoreValue = 800;
         }
 
-        // 【修复 3】绝对的关卡难度锁死判定
+        // 【修改点】：交互式碰撞壁垒。倍率提升至 15 倍，确保在恒定下落速度内绝对无法被击毁
         if (currentPlaneType === 'Ranger' && level >= 4) {
-            this.maxHealth *= 50; this.speed *= 2.5; this.shootTimer = 0.5;
+            if (this.type === 1) this.maxHealth *= 1.5; 
+            else this.maxHealth *= 15; 
+            this.shootTimer = 0.5;
         } else if (currentPlaneType === 'Interceptor' && level >= 7) {
-            this.maxHealth *= 50; this.speed *= 2.5; this.shootTimer = 0.5;
+            if (this.type === 1) this.maxHealth *= 1.5;
+            else this.maxHealth *= 15;
+            this.shootTimer = 0.5;
         } else if (currentPlaneType === 'Fortress' && level >= 8) {
-            this.maxHealth *= 50; this.speed *= 2.5; this.shootTimer = 0.5;
+            if (this.type === 1) this.maxHealth *= 1.5;
+            else this.maxHealth *= 15;
+            this.shootTimer = 0.5;
         }
 
         this.health = this.maxHealth;

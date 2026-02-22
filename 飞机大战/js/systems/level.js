@@ -19,7 +19,7 @@ export default class LevelSystem {
                 console.log(`⚠️ LEVEL ${this.level} - BOSS APPROACHING!`);
                 game.enemies.forEach(e => e.active = false);
             } 
-            // 【OS2 修复】释放大招期间，系统绝对不生成并放入新的敌机
+            // 释放大招期间，系统绝对不生成并放入新的敌机
             else if (this.spawnTimer > Math.max(0.5, 1.5 - this.level * 0.1) && game.skillSystem.state !== 'ACTIVE') {
                 this.spawnTimer = 0;
                 this.spawnNormalEnemy(game);
@@ -55,7 +55,7 @@ export default class LevelSystem {
         const maxX = game.playArea.maxX - margin;
         const spawnX = Math.random() * (maxX - minX) + minX;
         
-        // 【v3.7.5 最终修复】将全屏宽度改为 interactiveWidth，真正实现基于交互区计算敌机比例
+        // 【修改点】：严格传递 interactiveWidth 替代 canvas.width
         enemy.spawn(spawnX, -50, this.level, game.interactiveWidth, game.currentPlaneType);
         
         if (!game.enemies.includes(enemy)) {
