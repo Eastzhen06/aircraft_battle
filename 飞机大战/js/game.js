@@ -6,8 +6,84 @@ import ImageLoader, { ASSET_SOURCES } from './utils/imageLoader.js';
 import SkillSystem from './systems/skillSystem.js';
 import LevelSystem from './systems/level.js';
 import ObjectPool from './utils/objectPool.js';
-// 【v4.0 引入模块】
 import Wingman from './entities/wingman.js';
+
+// ==========================================
+// 【v4.4 三分化重构】：UnifiedInputSystem 物理隔离
+// ==========================================
+class UnifiedInputSystem {
+    constructor() {
+        this.mode = 'gesture'; 
+        this.x = window.innerWidth / 2;
+        this.y = window.innerHeight * 0.8;
+        this.keys = {};
+        this.touchCount = 0;
+        this.touchTimer = null;
+        this.activeTempGesture = null;
+        this.isTouching = false;
+
+        // 全局键盘监听，但在 getInput 时通过 mode 进行阻断
+        window.addEventListener('keydown', e => this.keys[e.code] = true);
+        window.addEventListener('keyup', e => this.keys[e.code] = false);
+
+        // 全局触屏监听，同样通过 mode 阻断
+        const canvas = document.getElementById('gameCanvas');
+        canvas.addEventListener('mousemove', e => {
+            if (this.mode === 'touch') { this.x = e.clientX; this.y = e.clientY; }
+        });
+        canvas.addEventListener('touchstart', e => {
+            if (this.mode === 'touch') {
+                this.isTouching = true;
+                this.x = e.touches[0].clientX; this.y = e.touches[0].clientY;
+                this.touchCount++;
+                if (this.touchTimer) clearTimeout(this.touchTimer);
+                this.touchTimer = setTimeout(() => {
+                    if (this.touchCount === 2) this.triggerTempGesture('FIST');
+                    else if (this.touchCount >= 3) this.triggerTempGesture('RECOIL');
+                    this.touchCount = 0;
+                }, 280);
+            }
+        });
+        canvas.addEventListener('touchmove', e => {
+            if (this.mode === 'touch') { this.x = e.touches[0].clientX; this.y = e.touches[0].clientY; }
+        });
+        canvas.addEventListener('touchend', () => { this.isTouching = false; });
+    }
+
+    triggerTempGesture(g) {
+        this.activeTempGesture = g;
+        setTimeout(() => this.activeTempGesture = null, 250); 
+    }
+
+    getInput(gestureEngine) {
+        if (this.mode === 'gesture') {
+            return gestureEngine.getInputState(); 
+        } 
+        else if (this.mode === 'keyboard') {
+            // 【纯键盘逻辑】：无视鼠标，移动全靠方向键累加，射击全靠空格
+            let gesture = 'IDLE';
+            if (this.keys['ArrowLeft']) this.x -= 12;
+            if (this.keys['ArrowRight']) this.x += 12;
+            if (this.keys['ArrowUp']) this.y -= 12;
+            if (this.keys['ArrowDown']) this.y += 12;
+
+            if (this.keys['Space'] && (this.keys['AltLeft'] || this.keys['AltRight'])) gesture = 'RECOIL';
+            else if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) gesture = 'FIST';
+            else if (this.keys['Space']) gesture = 'GUN';
+            return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
+        } 
+        else if (this.mode === 'touch') {
+            // 【纯触屏逻辑】：跟随坐标，拖拽即射击
+            let gesture = 'IDLE';
+            if (this.activeTempGesture) {
+                gesture = this.activeTempGesture;
+            } else if (this.isTouching) {
+                gesture = 'GUN'; 
+            }
+            return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
+        }
+    }
+}
 
 const CAMPAIGN_LEVELS = [
     { level: 1, name: '新手训练', desc: '纯小怪热身' },
@@ -24,79 +100,53 @@ const CAMPAIGN_LEVELS = [
 
 class Powerup {
     constructor() {
-        this.active = false;
-        this.x = 0; this.y = 0;
+        this.active = false; this.x = 0; this.y = 0;
         this.width = 40; this.height = 40;
-        this.type = 'HEALTH'; 
-        this.speed = 100;
-        this.angle = 0;
-        this.pulsePhase = 0;
+        this.type = 'HEALTH'; this.speed = 100;
+        this.angle = 0; this.pulsePhase = 0;
     }
     spawn(x, y) {
-        this.active = true;
-        this.x = x; this.y = y;
-        this.isMagnetized = false; // 【v4.0 新增】磁化状态
+        this.active = true; this.x = x; this.y = y; this.isMagnetized = false; 
         const r = Math.random();
-        if (r < 0.33) this.type = 'HEALTH';
-        else if (r < 0.66) this.type = 'POWER';
-        else this.type = 'SHIELD';
+        if (r < 0.33) this.type = 'HEALTH'; else if (r < 0.66) this.type = 'POWER'; else this.type = 'SHIELD';
     }
     update(deltaTime, canvasHeight, player) {
         if (!this.active) return;
-        
-        // 【v4.0 引力磁枢物理覆写】：被磁化后无视重力，高速向玩家坍缩
         if (this.isMagnetized && player) {
-            const dx = player.x - this.x;
-            const dy = player.y - this.y;
+            const dx = player.x - this.x; const dy = player.y - this.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > 0) {
-                this.x += (dx / dist) * 500 * deltaTime;
-                this.y += (dy / dist) * 500 * deltaTime;
-            }
+            if (dist > 0) { this.x += (dx / dist) * 500 * deltaTime; this.y += (dy / dist) * 500 * deltaTime; }
         } else {
             this.y += this.speed * deltaTime;
         }
-
-        this.angle += deltaTime * 2;
-        this.pulsePhase += deltaTime * 5;
+        this.angle += deltaTime * 2; this.pulsePhase += deltaTime * 5;
         if (this.y > canvasHeight + this.height) this.active = false;
     }
     draw(ctx) {
         if (!this.active) return;
-        ctx.save();
-        ctx.translate(this.x, this.y);
+        ctx.save(); ctx.translate(this.x, this.y);
         const pulse = 1 + Math.sin(this.pulsePhase) * 0.1;
-        ctx.scale(pulse, pulse);
-        ctx.rotate(this.angle);
+        ctx.scale(pulse, pulse); ctx.rotate(this.angle);
 
         let color, symbol;
         if (this.type === 'HEALTH') { color = '#00FF44'; symbol = '✚'; } 
         else if (this.type === 'POWER') { color = '#FF4400'; symbol = '⚡'; } 
         else if (this.type === 'SHIELD') { color = '#00CCFF'; symbol = '⛨'; }
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; ctx.strokeStyle = color; ctx.lineWidth = 2;
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
             const angle = (Math.PI * 2 / 6) * i - Math.PI / 2;
-            const px = Math.cos(angle) * (this.width / 2);
-            const py = Math.sin(angle) * (this.height / 2);
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
+            const px = Math.cos(angle) * (this.width / 2); const py = Math.sin(angle) * (this.height / 2);
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
         }
-        ctx.closePath();
-        ctx.fill(); 
+        ctx.closePath(); ctx.fill(); 
         ctx.save(); ctx.globalAlpha = 0.3; ctx.lineWidth = 6; ctx.stroke(); ctx.restore();
         ctx.stroke(); 
 
         ctx.rotate(-this.angle);
-        ctx.fillStyle = color;
-        ctx.font = `bold ${this.width * 0.5}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(symbol, 0, 0);
+        ctx.fillStyle = color; ctx.font = `bold ${this.width * 0.5}px Arial`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(symbol, 0, 0);
         ctx.restore();
     }
 }
@@ -110,21 +160,17 @@ class Game {
         this.gameContainer = document.getElementById('game-container');
         this.pauseBtn = document.getElementById('pause-btn');
         this.pauseScreen = document.getElementById('pause-screen');
-        
         this.debugWrapper = document.getElementById('debug-wrapper');
         this.debugToggleBtn = document.getElementById('debug-toggle-btn');
-        
         this.shieldCountUI = document.getElementById('shield-count');
         this.scoreUI = document.getElementById('score');
         this.levelUI = document.getElementById('level-display');
         this.livesUI = document.getElementById('lives-count');
-        
         this.planeNameUI = document.getElementById('selected-plane-name');
 
         this.state = 'MENU';
         this.score = 0; 
         this.selectedLevel = 1; 
-        
         this.lastTime = performance.now();
         this.deltaTime = 0;
         this.fps = 60;
@@ -132,6 +178,7 @@ class Game {
 
         this.imageLoader = new ImageLoader(); 
         this.gestureEngine = new GestureEngine();
+        this.unifiedInput = new UnifiedInputSystem(); 
         this.skillSystem = new SkillSystem();
         this.levelSystem = new LevelSystem();
 
@@ -141,7 +188,7 @@ class Game {
         this.powerupPool = new ObjectPool(() => new Powerup(), 20);
 
         this.player = null;
-        this.wingman = null; // 【v4.0 新增】僚机实例
+        this.wingman = null; 
         this.bullets = [];
         this.enemyBullets = [];
         this.enemies = [];
@@ -149,7 +196,7 @@ class Game {
         this.boss = null;
         
         this.currentPlaneType = 'Ranger';
-        this.currentWingmanType = 'none'; // 【v4.0 新增】僚机配置态
+        this.currentWingmanType = 'none'; 
         
         this.playArea = { minX: 0, maxX: window.innerWidth };
         this.interactiveWidth = window.innerWidth;
@@ -186,10 +233,6 @@ class Game {
                 document.querySelectorAll('.level-box').forEach(b => b.classList.remove('selected'));
                 box.classList.add('selected');
                 this.selectedLevel = lvl.level;
-                
-                document.getElementById('level-name').innerText = `第 ${lvl.level} 关: ${lvl.name}`;
-                document.getElementById('level-desc').innerText = lvl.desc;
-                document.getElementById('launch-level-btn').style.display = 'block';
             });
             grid.appendChild(box);
         });
@@ -209,7 +252,37 @@ class Game {
 
         document.getElementById('start-btn').addEventListener('click', () => {
             this.startScreen.style.display = 'none';
-            this.campaignScreen.classList.remove('hidden');
+            document.getElementById('mode-select-screen').classList.remove('hidden');
+        });
+
+        document.getElementById('back-from-mode-btn').addEventListener('click', () => {
+            document.getElementById('mode-select-screen').classList.add('hidden');
+            this.startScreen.style.display = 'flex';
+        });
+
+        const modeCards = document.querySelectorAll('#mode-select-screen .mode-card');
+        modeCards.forEach(card => {
+            card.addEventListener('click', (e) => {
+                this.unifiedInput.mode = card.dataset.mode;
+                document.getElementById('mode-select-screen').classList.add('hidden');
+                
+                if (this.unifiedInput.mode === 'gesture') document.getElementById('modal-gesture').classList.remove('hidden');
+                else if (this.unifiedInput.mode === 'keyboard') document.getElementById('modal-keyboard').classList.remove('hidden');
+                else document.getElementById('modal-touch').classList.remove('hidden');
+            });
+        });
+
+        document.querySelectorAll('.close-modal-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.target.closest('.modal').classList.add('hidden');
+                this.showCampaignScreen(); 
+            });
+        });
+
+        document.getElementById('view-tutorial-btn').addEventListener('click', () => {
+            if (this.unifiedInput.mode === 'gesture') document.getElementById('modal-gesture').classList.remove('hidden');
+            else if (this.unifiedInput.mode === 'keyboard') document.getElementById('modal-keyboard').classList.remove('hidden');
+            else document.getElementById('modal-touch').classList.remove('hidden');
         });
 
         document.getElementById('back-to-menu-btn').addEventListener('click', () => {
@@ -227,27 +300,39 @@ class Game {
         document.getElementById('restart-btn-pause').addEventListener('click', () => location.reload());
         document.getElementById('menu-btn-pause').addEventListener('click', () => location.reload());
 
+        // 【v4.4 修改部分】：文案字典映射更新
         const planeBtns = document.querySelectorAll('.plane-btn');
         planeBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 planeBtns.forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
                 this.currentPlaneType = e.target.dataset.type;
-                this.planeNameUI.textContent = { 'Ranger': '游骑兵', 'Interceptor': '拦截者', 'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸机' }[this.currentPlaneType] || this.currentPlaneType;
+                this.planeNameUI.textContent = { 'Ranger': '普通战机', 'Interceptor': '拦截者', 'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸机' }[this.currentPlaneType] || this.currentPlaneType;
             });
         });
 
-        // 【v4.0 新增：僚机按钮事件】
         const wingmanBtns = document.querySelectorAll('.wingman-btn');
         wingmanBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 wingmanBtns.forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
                 this.currentWingmanType = e.target.dataset.type;
-                const names = { 'none': '无僚机', 'defensive': '防御盾卫', 'offensive': '侧翼火力', 'magnetic': '引力磁枢' };
+                const names = { 'none': '无僚机', 'defensive': '防御型僚机', 'offensive': '攻击型僚机', 'magnetic': '磁吸型僚机' };
                 document.getElementById('selected-wingman-name').textContent = names[this.currentWingmanType];
             });
         });
+    }
+
+    showCampaignScreen() {
+        this.campaignScreen.classList.remove('hidden');
+        const display = document.getElementById('current-mode-display');
+        if (this.unifiedInput.mode === 'gesture') {
+            display.innerHTML = `<div class="mode-text-heavy">手势控制</div>`;
+        } else if (this.unifiedInput.mode === 'keyboard') {
+            display.innerHTML = `<div class="mode-text-flat">全键盘操作</div>`;
+        } else {
+            display.innerHTML = `<div class="mode-text-flat">鼠标/触屏滑动</div>`;
+        }
     }
 
     resize() {
@@ -266,7 +351,6 @@ class Game {
         this.lastTime = performance.now();
         
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.interactiveWidth);
-        // 【v4.0 新增：实例化僚机系统】
         this.wingman = new Wingman(this.currentWingmanType, this.imageLoader, this.interactiveWidth);
         
         this.bullets = [];
@@ -279,12 +363,18 @@ class Game {
         this.levelSystem.level = startLevel; 
         this.skillSystem.init(); 
 
-        const video = document.createElement('video');
-        video.setAttribute('playsinline', '');
-        video.setAttribute('webkit-playsinline', '');
-        video.style.display = 'none';
-        document.body.appendChild(video);
-        this.gestureEngine.init(video, document.getElementById('debugCanvas'), this.canvas);
+        if (this.unifiedInput.mode === 'gesture') {
+            const video = document.createElement('video');
+            video.setAttribute('playsinline', '');
+            video.setAttribute('webkit-playsinline', '');
+            video.style.display = 'none';
+            document.body.appendChild(video);
+            this.gestureEngine.init(video, document.getElementById('debugCanvas'), this.canvas);
+        } else {
+            document.getElementById('gesture-display').textContent = `动作: ${this.unifiedInput.mode} 接入`;
+            this.unifiedInput.x = this.canvas.width / 2;
+            this.unifiedInput.y = this.canvas.height * 0.8;
+        }
         
         this.gameLoop(performance.now());
     }
@@ -320,12 +410,10 @@ class Game {
         const b = this.playerBulletPool.get();
         b.x = x; b.y = y; b.speed = speed; b.damage = damage; 
         b.type = type; b.angleOffset = offset; b.state = 'FLYING'; b.timer = 0;
-        
         if (type === 'pierce') { b.width=10; b.height=30; b.color='#ff0055'; b.isPiercing=true; }
         else if (type === 'spread') { b.width=4; b.height=10; b.color='#ffff00'; b.isPiercing=false; }
         else if (type === 'bomb') { b.width=20; b.height=20; b.color='#9900ff'; b.isPiercing=false; }
         else { b.width=4; b.height=12; b.color='#00d4ff'; b.isPiercing=false; }
-        
         if (!this.bullets.includes(b)) this.bullets.push(b);
     }
 
@@ -341,7 +429,6 @@ class Game {
 
     handlePlayerDamage(damageAmount) {
         if (this.player.isInvincible) return; 
-        
         this.player.hp -= damageAmount;
         if (this.player.hp <= 0) {
             this.player.lives--;
@@ -361,19 +448,22 @@ class Game {
         this.skillSystem.update(this.deltaTime);
         this.levelSystem.update(this.deltaTime, this);
 
-        const input = this.gestureEngine.getInputState();
-        const clampedInput = { ...input };
+        const rawInput = this.unifiedInput.getInput(this.gestureEngine);
+        const clampedInput = { ...rawInput };
+        
         if (clampedInput.isDetected) {
             const safeRadius = this.player.width/2 * 1.5; 
             clampedInput.x = Math.max(this.playArea.minX + safeRadius, Math.min(clampedInput.x, this.playArea.maxX - safeRadius));
         }
 
+        if (this.wingman && this.wingman.type === 'defensive' && this.wingman.isForcefieldActive) {
+            if (clampedInput.gesture === 'FIST') clampedInput.gesture = 'IDLE'; 
+        }
+
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
         
-        // 【v4.0 侧翼火力系统】：联动机炮同步开火
         if (shouldShoot) { 
             if (this.wingman) this.wingman.shoot(this); 
-            
             const px = this.player.x; const py = this.player.y - this.player.height / 2;
             const bType = this.player.bulletType;
             const pl = this.player.powerLevel || 0;
@@ -400,7 +490,6 @@ class Game {
             }
         }
 
-        // 【v4.0 生命周期挂载】更新僚机系统
         if (this.wingman) this.wingman.update(this.player, this.deltaTime, this);
 
         const isOutOfBounds = (x, y) => (x < this.playArea.minX || x > this.playArea.maxX || y < 10 || y > this.canvas.height + 10);
@@ -431,19 +520,15 @@ class Game {
             if (b.active && isOutOfBounds(b.x, b.y)) {
                 b.active = false;
             } else if (b.active) {
-                // 【v4.0 防御盾卫系统】：优先进行僚机外围 AABB 拦截
-                if (this.wingman && this.wingman.type === 'defensive' && this.wingman.active) {
-                    const blockRadius = this.wingman.width * 0.8;
-                    if (Math.hypot(b.x - this.wingman.left.x, b.y - this.wingman.left.y) < blockRadius ||
-                        Math.hypot(b.x - this.wingman.right.x, b.y - this.wingman.right.y) < blockRadius) {
-                        b.active = false; // 子弹被力场抵消
-                        return;
-                    }
+                if (this.wingman && this.wingman.type === 'defensive' && this.wingman.isForcefieldActive) {
+                    const fw = (this.wingman.right.x - this.wingman.left.x) + this.wingman.width * 2;
+                    const fx = this.wingman.left.x - this.wingman.width;
+                    const fh = (this.wingman.left.y - this.player.y) + this.player.height + 40;
+                    const fy = this.player.y - this.player.height;
+                    if (b.x > fx && b.x < fx + fw && b.y > fy && b.y < fy + fh) { b.active = false; return; }
                 }
-                // 主机判定
                 if (Math.abs(b.x - this.player.x) < hitZoneX && Math.abs(b.y - this.player.y) < hitZoneY) {
-                    this.handlePlayerDamage(b.damage);
-                    b.active = false;
+                    this.handlePlayerDamage(b.damage); b.active = false;
                 }
             }
         });
@@ -455,25 +540,18 @@ class Game {
                     if (b.active && b.state === 'FLYING') {
                         let collision = false;
                         if (b.type === 'bomb') {
-                            const collX = (e.width/2 * 0.7) + (b.width/2 * 0.5);
-                            const collY = (e.height/2 * 0.7) + (b.height/2 * 0.5);
+                            const collX = (e.width/2 * 0.7) + (b.width/2 * 0.5); const collY = (e.height/2 * 0.7) + (b.height/2 * 0.5);
                             collision = Math.abs(b.x - e.x) < collX && Math.abs(b.y - e.y) < collY;
                         } else {
                             collision = Math.abs(b.x - e.x) < (e.width/2 + b.width/2) && Math.abs(b.y - e.y) < (e.height/2 + b.height/2);
                         }
-
                         if (collision) {
                             const killed = e.takeDamage(b.damage);
-                            if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } 
-                            else if (!b.isPiercing) { b.active = false; }
-                            
+                            if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } else if (!b.isPiercing) { b.active = false; }
                             if (killed) { 
-                                this.skillSystem.addEnergy(10); 
-                                this.score += e.scoreValue; 
-                                
+                                this.skillSystem.addEnergy(10); this.score += e.scoreValue; 
                                 if (e.type === 3 || (e.type === 2 && Math.random() < 0.4)) {
-                                    const p = this.powerupPool.get();
-                                    p.spawn(e.x, e.y);
+                                    const p = this.powerupPool.get(); p.spawn(e.x, e.y);
                                     if (!this.powerups.includes(p)) this.powerups.push(p);
                                 }
                             }
@@ -481,13 +559,10 @@ class Game {
                     }
                 });
 
-                if (Math.abs(e.x - this.player.x) < (e.width/2 + this.player.width/2 * 0.8) && 
-                    Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
+                if (Math.abs(e.x - this.player.x) < (e.width/2 + this.player.width/2 * 0.8) && Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
                     e.active = false; 
                     if (!this.player.isInvincible) {
-                        let crashDamage = 10;       
-                        if (e.type === 2) crashDamage = 30;  
-                        if (e.type === 3) crashDamage = 60;  
+                        let crashDamage = 10; if (e.type === 2) crashDamage = 30; if (e.type === 3) crashDamage = 60;  
                         this.handlePlayerDamage(crashDamage);
                     }
                 }
@@ -501,17 +576,14 @@ class Game {
                 if (b.active && b.state === 'FLYING') {
                     let collision = false;
                     if (b.type === 'bomb') {
-                        const collX = (this.boss.width/2 * 0.7) + (b.width/2 * 0.5);
-                        const collY = (this.boss.height/2 * 0.7) + (b.height/2 * 0.5);
+                        const collX = (this.boss.width/2 * 0.7) + (b.width/2 * 0.5); const collY = (this.boss.height/2 * 0.7) + (b.height/2 * 0.5);
                         collision = Math.abs(b.x - this.boss.x) < collX && Math.abs(b.y - this.boss.y) < collY;
                     } else {
                         collision = Math.abs(b.x - this.boss.x) < (this.boss.width/2 + b.width/2) && Math.abs(b.y - this.boss.y) < (this.boss.height/2 + b.height/2);
                     }
-
                     if (collision) {
                         const bossKilled = this.boss.takeDamage(b.damage);
-                        if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } 
-                        else if (!b.isPiercing) { b.active = false; }
+                        if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } else if (!b.isPiercing) { b.active = false; }
                         if (bossKilled) this.score += this.boss.scoreValue;
                     }
                 }
@@ -538,20 +610,24 @@ class Game {
             hpFill.style.width = `${hpPct}%`;
             hpFill.style.background = hpPct > 30 ? 'linear-gradient(90deg, #ff0055, #00d4ff)' : '#ff0055';
         }
+
+        // 【v4.4 修改部分】：大招文字逻辑覆写
+        const ultTextEl = document.getElementById('ult-text');
+        if (ultTextEl) {
+            if (this.skillSystem.isReady()) {
+                ultTextEl.textContent = '可以触发大招';
+            } else {
+                ultTextEl.textContent = `${Math.floor((this.skillSystem.energy / this.skillSystem.maxEnergy) * 100)}%`;
+            }
+        }
     }
 
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        this.ctx.save();
-        this.ctx.setLineDash([5, 15]);
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.playArea.minX, 0); this.ctx.lineTo(this.playArea.minX, this.canvas.height);
+        this.ctx.save(); this.ctx.setLineDash([5, 15]); this.ctx.lineWidth = 2; this.ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+        this.ctx.beginPath(); this.ctx.moveTo(this.playArea.minX, 0); this.ctx.lineTo(this.playArea.minX, this.canvas.height);
         this.ctx.moveTo(this.playArea.maxX, 0); this.ctx.lineTo(this.playArea.maxX, this.canvas.height);
-        this.ctx.stroke();
-        this.ctx.restore();
+        this.ctx.stroke(); this.ctx.restore();
         
         if (this.skillSystem.state === 'ACTIVE') {
             this.ctx.fillStyle = `rgba(255, 0, 85, ${0.1 + Math.random() * 0.1})`;
@@ -562,25 +638,18 @@ class Game {
         if (this.boss) this.boss.draw(this.ctx);
         this.powerups.forEach(p => p.draw(this.ctx));
         if (this.player) this.player.draw(this.ctx);
-        if (this.wingman) this.wingman.draw(this.ctx); // 【v4.0 挂载僚机渲染】
+        if (this.wingman) this.wingman.draw(this.ctx, this.player); 
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemyBullets.forEach(b => b.draw(this.ctx));
-        
         this.drawPerformanceMonitor();
     }
 
     drawPerformanceMonitor() {
-        const x = this.canvas.width - 150;
-        const y = this.canvas.height - 60;
-        this.ctx.font = '12px Orbitron, Courier New';
-        this.ctx.textAlign = 'left';
-        this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00d4ff';
-        this.ctx.fillText(`FPS: ${Math.round(this.fps)}`, x, y);
-        this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00d4ff';
-        this.ctx.fillText(`FT:  ${this.frameTime.toFixed(1)}ms`, x, y + 15);
+        const x = this.canvas.width - 150; const y = this.canvas.height - 60;
+        this.ctx.font = '12px Orbitron, Courier New'; this.ctx.textAlign = 'left';
+        this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00d4ff'; this.ctx.fillText(`FPS: ${Math.round(this.fps)}`, x, y);
+        this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00d4ff'; this.ctx.fillText(`FT:  ${this.frameTime.toFixed(1)}ms`, x, y + 15);
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-    new Game().init();
-});
+window.addEventListener('DOMContentLoaded', () => { new Game().init(); });

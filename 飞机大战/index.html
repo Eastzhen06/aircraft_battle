@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - OS2 终极架构 v4.0</title>
+    <title>飞机大战 - OS2 指尖长空 v4.4</title>
     <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -16,14 +16,14 @@
         </div>
         
         <div class="plane-selector">
-            <p style="color:#00d4ff; margin-bottom:5px; font-size: 1.2em;">挂载机型: <span id="selected-plane-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">游骑兵</span></p>
+            <p style="color:#00d4ff; margin-bottom:5px; font-size: 1.2em;">挂载机型: <span id="selected-plane-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">普通战机</span></p>
             <p style="color:#00FF44; margin-bottom:10px; font-size: 1.1em;">辅助僚机: <span id="selected-wingman-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">无僚机</span></p>
         </div>
 
         <div id="admin-debug-panel" class="debug-panel" style="margin-top: 10px; border: 1px solid #00d4ff; padding: 15px; border-radius: 8px; background: rgba(0,212,255,0.05); width: 80%; max-width: 400px;">
-            <p style="font-size:12px; color:#00d4ff; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 机甲终端配置 --</p>
+            <p style="font-size:12px; color:#00d4ff; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 主机终端配置 --</p>
             <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;">
-                <button class="plane-btn active" data-type="Ranger">游骑兵</button>
+                <button class="plane-btn active" data-type="Ranger">普通战机</button>
                 <button class="plane-btn" data-type="Interceptor">拦截者</button>
                 <button class="plane-btn" data-type="Fortress">重装堡垒</button>
                 <button class="plane-btn" data-type="VoidBomber">虚空轰炸机</button>
@@ -32,24 +32,90 @@
             <p style="font-size:12px; color:#00FF44; margin-top:15px; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 僚机系统挂载 --</p>
             <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;">
                 <button class="wingman-btn active" data-type="none">无僚机</button>
-                <button class="wingman-btn" data-type="defensive">防御盾卫</button>
-                <button class="wingman-btn" data-type="offensive">侧翼火力</button>
-                <button class="wingman-btn" data-type="magnetic">引力磁枢</button>
+                <button class="wingman-btn" data-type="defensive">防御型僚机</button>
+                <button class="wingman-btn" data-type="offensive">攻击型僚机</button>
+                <button class="wingman-btn" data-type="magnetic">磁吸型僚机</button>
             </div>
         </div>
         
-        <button id="start-btn" class="btn primary" style="margin-top: 20px; font-size: 1.5em; padding: 15px 40px;">进入作战中心</button>
+        <button id="start-btn" class="btn primary" style="margin-top: 20px; font-size: 1.5em; padding: 15px 40px;">进入作战系统</button>
+    </div>
+
+    <div id="mode-select-screen" class="screen hidden os2-panel">
+        <h2 style="color: #00d4ff; margin-bottom: 30px; font-size: 2.2em; text-shadow: 0 0 10px #00d4ff;">请选择战机控制模式</h2>
+        <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 40px; align-items: stretch;">
+            
+            <div class="mode-card" data-mode="keyboard" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="mode-text-flat">全键盘操作</div>
+            </div>
+            
+            <div class="mode-card" data-mode="touch" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="mode-text-flat">鼠标/触屏滑动</div>
+            </div>
+            
+            <div class="mode-card" data-mode="gesture" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="mode-text-heavy">手势控制</div>
+                <div class="mode-text-light">沉浸式视觉交互</div>
+            </div>
+        </div>
+        <button id="back-from-mode-btn" class="btn secondary" style="width: 200px; padding: 10px;">返回主菜单</button>
+    </div>
+
+    <div id="modal-gesture" class="modal hidden os2-panel">
+        <div class="modal-content">
+            <h2 style="color: #00d4ff; margin-bottom: 15px;">👋 手势作战指南</h2>
+            <div class="tutorial-text">
+                <p>👉 <strong>自动射击：</strong> 保持【手枪】姿势，系统将锁定开火。</p>
+                <p>✊ <strong>保护罩：</strong> 握紧【拳头】，展开高能偏导护盾。</p>
+                <p>💥 <strong>释放大招：</strong> 模拟手枪【后坐力】（食指快速上抬），释放毁灭打击！</p>
+            </div>
+            <p class="tutorial-tip">小贴士：想让护盾和大招识别更准确？记得把手放在画面框内，手势识别会更灵敏准确哦！</p>
+            <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button> 
+        </div>
+    </div>
+
+    <div id="modal-keyboard" class="modal hidden os2-panel">
+        <div class="modal-content">
+            <h2 style="color: #00FF44; margin-bottom: 15px;">⌨️ 键盘先锋指南</h2>
+            <div class="tutorial-section">
+                <p><strong>方向键 (↑↓←→)：</strong> 控制战机上下左右移动</p>
+                <p><strong>Space键 (空格)：</strong> 持续射击</p>
+                <p><strong>Shift键：</strong> 开启保护罩</p>
+                <p><strong>Space + Alt：</strong> 释放大招</p>
+            </div>
+            <p class="tutorial-tip">小贴士：释放大招时，请务必先按住空格键，再按下 Alt 键，否则可能会与系统的其他快捷键冲突引发意外跳转~</p>
+            <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
+        </div>
+    </div>
+
+    <div id="modal-touch" class="modal hidden os2-panel">
+        <div class="modal-content">
+            <h2 style="color: #00FF44; margin-bottom: 15px;">📱 触控/鼠标达人</h2>
+            <div class="tutorial-section">
+                <p><strong>单指/鼠标拖拽：</strong> 丝滑走位并自动射击</p>
+                <p><strong>快速双击：</strong> 开启保护罩</p>
+                <p><strong>快速三击：</strong> 释放大招</p>
+            </div>
+            <p class="tutorial-tip">小贴士：触控模式下双击和三击需要快速连续点击同一位置才能精准触发哦！</p>
+            <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
+        </div>
     </div>
 
     <div id="campaign-screen" class="screen hidden os2-panel">
-        <h2 style="color: #00d4ff; margin-bottom: 20px; text-shadow: 0 0 10px #00d4ff;">选择作战宙域</h2>
-        <div class="campaign-content">
-            <div id="level-grid" class="level-grid"></div>
-            <div class="level-details os2-panel">
-                <h3 id="level-name" style="color: #fff;">建立连接...</h3>
-                <p id="level-desc" style="color: #aaa; margin: 20px 0; line-height: 1.5;">请从左侧矩阵选择目标空域。</p>
-                <button id="launch-level-btn" class="btn primary" style="display: none; width: 100%; font-size: 1.2em;">部署出击</button>
-                <button id="back-to-menu-btn" class="btn secondary" style="margin-top: 15px; width: 100%;">断开并返回首页</button>
+        <div class="campaign-split-layout">
+            <div class="split-left">
+                <h2 class="split-title">选择开始关卡</h2>
+                <p class="split-subtitle">请点击关卡序号--决定无尽模式开始关卡</p>
+                <div id="level-grid" class="level-grid" style="margin-top: 20px;"></div>
+            </div>
+            <div class="split-right">
+                <h3 style="color: #00FF44; margin-top:0; border-bottom: 1px solid #00FF44; padding-bottom: 5px;">当前载入模式</h3>
+                <div id="current-mode-display" class="mode-card active" style="cursor: default;"></div>
+                <button id="view-tutorial-btn" class="btn secondary" style="margin-top: 10px; width: 100%; font-size: 14px;">重新查看操作指南</button>
+                <div class="action-area" style="margin-top: auto; display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                    <button id="launch-level-btn" class="btn primary" style="width: 100%; font-size: 1.2em;">部署出击</button>
+                    <button id="back-to-menu-btn" class="btn secondary" style="width: 100%;">断开连接</button>
+                </div>
             </div>
         </div>
     </div>
@@ -58,12 +124,9 @@
         <canvas id="gameCanvas"></canvas>
         <div id="debug-wrapper" class="debug-wrapper os2-panel">
             <canvas id="debugCanvas"></canvas>
-            <div id="debug-info" class="debug-info">
-                <span id="fps-display">FPS: 0</span> | <span id="gesture-display">动作: IDLE</span>
-            </div>
+            <div id="debug-info" class="debug-info"><span id="fps-display">FPS: 0</span> | <span id="gesture-display">动作: IDLE</span></div>
             <button id="debug-toggle-btn" class="toggle-tab">◀</button>
         </div>
-
         <button id="pause-btn" class="btn icon-btn" style="position: absolute; top: 15px; left: 15px; z-index: 1000; padding: 10px;">⏸️</button>
 
         <div id="pause-screen" class="screen hidden os2-panel">
@@ -78,29 +141,15 @@
         <div id="hud" class="hidden">
             <div class="hud-left">
                 <div class="hud-item"><span class="hud-label">关卡</span><span id="level-display" class="hud-value" style="color: #ffaa00;">1</span></div>
-                <div class="hud-item"><span class="hud-label">积分</span><span id="score" class="hud-value">0</span></div>
+                <div class="hud-item"><span class="hud-label">积分</span><span id="score">0</span></div>
             </div>
             <div class="hud-right">
-                <div class="hud-item" style="justify-content: flex-end;">
-                    <span id="lives-count" class="hud-value" style="color: #ff4444; font-size: 24px;">❤️ x 3</span>
-                </div>
-                <div class="hud-item">
-                    <span class="hud-label">生命值</span>
-                    <div id="health-bar" class="health-bar"><div id="health-fill" class="health-fill"></div></div>
-                </div>
-                 <div class="hud-item">
-                    <div id="shield-icon-container">
-                        <span class="hud-label">保护罩</span>
-                        <span id="shield-count" class="hud-value" style="color: #00d4ff;">🛡️ x 3</span>
-                    </div>
-                </div>
+                <div class="hud-item" style="justify-content: flex-end;"><span id="lives-count" class="hud-value" style="color: #ff4444; font-size: 24px;">❤️ x 3</span></div>
+                <div class="hud-item"><span class="hud-label">生命值</span><div id="health-bar" class="health-bar"><div id="health-fill" class="health-fill"></div></div></div>
+                 <div class="hud-item"><div id="shield-icon-container"><span class="hud-label">保护罩</span><span id="shield-count" class="hud-value" style="color: #00d4ff;">🛡️ x 3</span></div></div>
             </div>
         </div>
-
-        <div id="ult-container" class="hidden os2-panel">
-            <div id="ult-fill"></div>
-            <span id="ult-text">0%</span>
-        </div>
+        <div id="ult-container" class="hidden os2-panel"><div id="ult-fill"></div><span id="ult-text">0%</span></div>
     </div>
     <script type="module" src="js/game.js"></script>
 </body>

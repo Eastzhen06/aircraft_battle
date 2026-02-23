@@ -9,7 +9,6 @@ html, body {
 #game-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
 canvas#gameCanvas { display: block; width: 100%; height: 100%; background: #05050a; }
 
-/* OS2 面板基调 (保留静态面板毛玻璃，去除了动态物体的滤镜) */
 .os2-panel {
     background: rgba(10, 15, 30, 0.45);
     border: 1px solid rgba(0, 212, 255, 0.4);
@@ -42,21 +41,21 @@ canvas#gameCanvas { display: block; width: 100%; height: 100%; background: #0505
 .btn.warning { border-color: #ff0055; color: #ff0055; }
 .btn.warning:hover { background: #ff0055; color: #fff; box-shadow: 0 0 20px #ff0055; }
 
-/* 【修复 4】严格复刻 v3.7.1 的右上角 HUD 样式 */
 #hud {
-    position: absolute;
-    top: 20px;
-    right: 30px; /* 回归右上角 */
-    display: flex;
-    flex-direction: column; /* 垂直排列 */
-    align-items: flex-end; /* 右对齐 */
-    gap: 15px;
-    z-index: 800;
+    position: absolute; top: 20px; right: 30px; display: flex;
+    flex-direction: column; align-items: flex-end; gap: 15px; z-index: 800;
 }
 .hud-left, .hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .hud-item { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 10px; }
 .hud-label { font-size: 14px; color: rgba(255, 255, 255, 0.8); text-transform: uppercase; }
 .hud-value { font-size: 20px; font-weight: bold; text-shadow: 0 0 5px currentColor; }
+
+#score {
+    color: #ffffff !important;
+    font-weight: 900 !important;
+    font-size: 28px !important;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5) !important;
+}
 
 .health-bar { width: 150px; height: 12px; background: rgba(0,0,0,0.8); border: 1px solid #fff; border-radius: 6px; overflow: hidden; }
 .health-fill { height: 100%; background: linear-gradient(90deg, #ff0055, #00d4ff); width: 100%; transition: width 0.2s, background 0.2s; }
@@ -73,7 +72,6 @@ canvas#debugCanvas { display: block; width: 100%; height: 100%; pointer-events: 
     border: 1px solid #00d4ff; border-left: none; color: #00d4ff;
     cursor: pointer; border-radius: 0 5px 5px 0;
 }
-
 .debug-info { position: absolute; top: 5px; left: 5px; font-size: 10px; color: #00ff00; text-shadow: 1px 1px 2px #000; }
 
 #ult-container {
@@ -81,7 +79,7 @@ canvas#debugCanvas { display: block; width: 100%; height: 100%; pointer-events: 
     width: 300px; height: 20px; border-radius: 10px; overflow: hidden; z-index: 800;
 }
 #ult-fill { height: 100%; background: #00d4ff; width: 0%; transition: width 0.1s; }
-#ult-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 12px; font-weight: bold; text-shadow: 1px 1px 3px black; }
+#ult-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 14px; font-weight: bold; text-shadow: 1px 1px 3px black; white-space: nowrap; }
 .ult-ready { border-color: #ff0055 !important; box-shadow: 0 0 20px #ff0055 !important; animation: ult-pulse 1s infinite alternate; }
 .ult-ready #ult-fill { background: linear-gradient(90deg, #ffcc00, #ff0055); }
 @keyframes ult-pulse { 0% { transform: translateX(-50%) scale(1); } 100% { transform: translateX(-50%) scale(1.05); } }
@@ -97,18 +95,42 @@ canvas#debugCanvas { display: block; width: 100%; height: 100%; pointer-events: 
 .level-box:hover, .level-box.selected { background: #00d4ff; color: #000; box-shadow: 0 0 15px #00d4ff; font-weight: bold; }
 .level-details { flex: 1; padding: 20px; display: flex; flex-direction: column; justify-content: center; }
 
-.plane-btn {
-    background: transparent; border: 1px solid #00d4ff; color: #00d4ff;
-    padding: 8px 15px; cursor: pointer; font-family: 'Orbitron'; border-radius: 4px; transition: all 0.2s;
-}
-.plane-btn:hover, .plane-btn.active { background: #00d4ff; color: #000; box-shadow: 0 0 10px #00d4ff; 
-}
-
-/* ==========================================
-   【v4.0 修改部分：僚机选择器样式】
-   ========================================== */
-.wingman-btn {
-    background: transparent; border: 1px solid #00FF44; color: #00FF44;
-    padding: 8px 15px; cursor: pointer; font-family: 'Orbitron'; border-radius: 4px; transition: all 0.2s;
-}
+.plane-btn { background: transparent; border: 1px solid #00d4ff; color: #00d4ff; padding: 8px 15px; cursor: pointer; font-family: 'Orbitron'; border-radius: 4px; transition: all 0.2s; }
+.plane-btn:hover, .plane-btn.active { background: #00d4ff; color: #000; box-shadow: 0 0 10px #00d4ff; }
+.wingman-btn { background: transparent; border: 1px solid #00FF44; color: #00FF44; padding: 8px 15px; cursor: pointer; font-family: 'Orbitron'; border-radius: 4px; transition: all 0.2s; }
 .wingman-btn:hover, .wingman-btn.active { background: #00FF44; color: #000; box-shadow: 0 0 10px #00FF44; }
+
+.campaign-split-layout { display: flex; flex-direction: row; gap: 40px; padding: 30px; width: 85%; max-width: 1000px; height: 60vh; }
+.split-left { flex: 2; display: flex; flex-direction: column; border-right: 1px solid rgba(0, 212, 255, 0.3); padding-right: 30px; }
+.split-right { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+.split-title { color: #00d4ff; font-size: 1.8em; margin: 0; }
+.split-subtitle { color: #aaa; font-size: 14px; margin-top: 5px; }
+
+.mode-card {
+    background: rgba(10, 15, 30, 0.6); border: 2px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px; padding: 20px; cursor: pointer; text-align: center;
+    transition: all 0.3s ease;
+}
+.mode-card:hover { border-color: #00d4ff; box-shadow: 0 0 15px rgba(0,212,255,0.4); }
+.mode-card.active { border-color: #00FF44; box-shadow: 0 0 20px rgba(0,255,68,0.5); background: rgba(0,255,68,0.1); }
+.mode-text-flat { color: #fff; font-size: 16px; font-weight: normal; margin: 5px 0; }
+.mode-text-heavy { color: #00d4ff; font-size: 22px; font-weight: bold; margin-bottom: 8px; }
+.mode-text-light { color: #888; font-size: 12px; font-weight: 300; }
+
+/* 强制弹窗居中与自适应滚动 */
+.modal { z-index: 9999 !important; display: flex; align-items: center; justify-content: center; }
+.modal-content {
+    background: rgba(10, 15, 30, 0.95); border: 2px solid #00d4ff;
+    padding: 30px; border-radius: 12px; 
+    width: 85%; max-width: 500px; max-height: 80vh; overflow-y: auto;
+    box-shadow: 0 0 40px rgba(0,212,255,0.5); text-align: left;
+}
+.tutorial-text p { color: #ddd; font-size: 16px; line-height: 1.8; margin-bottom: 10px; }
+.tutorial-section p { color: #ccc; font-size: 15px; margin: 8px 0; }
+
+/* 提亮小贴士 */
+.tutorial-tip {
+    font-size: 13px; color: #ffaa00; 
+    font-weight: bold; margin-top: 20px; margin-bottom: 20px;
+    line-height: 1.5; border-top: 1px dashed #444; padding-top: 10px;
+}
