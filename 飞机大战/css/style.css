@@ -51,14 +51,30 @@ canvas#gameCanvas { display: block; width: 100%; height: 100%; background: #0505
 .hud-value { font-size: 20px; font-weight: bold; text-shadow: 0 0 5px currentColor; }
 
 #score {
-    color: #ffffff !important;
-    font-weight: 900 !important;
-    font-size: 28px !important;
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5) !important;
+    color: #ffffff !important; font-weight: 900 !important;
+    font-size: 28px !important; text-shadow: 0 0 10px rgba(255, 255, 255, 0.5) !important;
 }
 
 .health-bar { width: 150px; height: 12px; background: rgba(0,0,0,0.8); border: 1px solid #fff; border-radius: 6px; overflow: hidden; }
 .health-fill { height: 100%; background: linear-gradient(90deg, #ff0055, #00d4ff); width: 100%; transition: width 0.2s, background 0.2s; }
+
+/* 【v4.5 修改部分】：新增音频面板样式 */
+.audio-panel { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.audio-row { display: flex; align-items: center; gap: 10px; }
+.audio-label { font-size: 12px; color: #00d4ff; text-transform: uppercase; }
+.toggle-switch {
+    position: relative; width: 40px; height: 20px;
+    -webkit-appearance: none; 
+    appearance: none; /* 加上这句，VS Code 就不会报警告了 */
+    background: rgba(255,255,255,0.2);
+    outline: none; border-radius: 10px; cursor: pointer; transition: 0.3s;
+}
+.toggle-switch:checked { background: #00FF44; }
+.toggle-switch::before {
+    content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    top: 2px; left: 2px; background: #fff; transition: 0.3s; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+.toggle-switch:checked::before { transform: translateX(20px); }
 
 .debug-wrapper {
     position: absolute; top: 80px; left: 10px; width: 200px; height: 150px; z-index: 900;
@@ -85,26 +101,29 @@ canvas#debugCanvas { display: block; width: 100%; height: 100%; pointer-events: 
 @keyframes ult-pulse { 0% { transform: translateX(-50%) scale(1); } 100% { transform: translateX(-50%) scale(1.05); } }
 
 .hidden { display: none !important; }
-.campaign-content { display: flex; flex-direction: row; gap: 40px; padding: 30px; width: 80%; max-width: 900px; }
-.level-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; flex: 2; }
+
+/* 选关与模式面板 */
+.campaign-split-layout { display: flex; flex-direction: row; gap: 40px; padding: 30px; width: 85%; max-width: 1000px; height: 60vh; }
+.split-left { flex: 2; display: flex; flex-direction: column; border-right: 1px solid rgba(0, 212, 255, 0.3); padding-right: 30px; }
+.split-right { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+.split-title { color: #00d4ff; font-size: 1.8em; margin: 0; }
+.split-subtitle { color: #aaa; font-size: 14px; margin-top: 5px; }
+
+/* 【v4.5 修改部分】：无尽模式字体提亮缩放排版 */
+.highlight-text { font-weight: bold; font-size: 16px; color: #00d4ff; }
+
+.level-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-top: 20px; }
 .level-box {
     background: rgba(0, 212, 255, 0.1); border: 1px solid #00d4ff; border-radius: 5px;
     display: flex; justify-content: center; align-items: center; height: 60px;
     font-size: 1.5em; color: #00d4ff; cursor: pointer; transition: all 0.2s;
 }
 .level-box:hover, .level-box.selected { background: #00d4ff; color: #000; box-shadow: 0 0 15px #00d4ff; font-weight: bold; }
-.level-details { flex: 1; padding: 20px; display: flex; flex-direction: column; justify-content: center; }
 
-.plane-btn { background: transparent; border: 1px solid #00d4ff; color: #00d4ff; padding: 8px 15px; cursor: pointer; font-family: 'Orbitron'; border-radius: 4px; transition: all 0.2s; }
+.plane-btn, .wingman-btn { background: transparent; border: 1px solid #00d4ff; color: #00d4ff; padding: 8px 15px; cursor: pointer; font-family: 'Orbitron'; border-radius: 4px; transition: all 0.2s; }
 .plane-btn:hover, .plane-btn.active { background: #00d4ff; color: #000; box-shadow: 0 0 10px #00d4ff; }
-.wingman-btn { background: transparent; border: 1px solid #00FF44; color: #00FF44; padding: 8px 15px; cursor: pointer; font-family: 'Orbitron'; border-radius: 4px; transition: all 0.2s; }
+.wingman-btn { border-color: #00FF44; color: #00FF44; }
 .wingman-btn:hover, .wingman-btn.active { background: #00FF44; color: #000; box-shadow: 0 0 10px #00FF44; }
-
-.campaign-split-layout { display: flex; flex-direction: row; gap: 40px; padding: 30px; width: 85%; max-width: 1000px; height: 60vh; }
-.split-left { flex: 2; display: flex; flex-direction: column; border-right: 1px solid rgba(0, 212, 255, 0.3); padding-right: 30px; }
-.split-right { flex: 1; display: flex; flex-direction: column; gap: 20px; }
-.split-title { color: #00d4ff; font-size: 1.8em; margin: 0; }
-.split-subtitle { color: #aaa; font-size: 14px; margin-top: 5px; }
 
 .mode-card {
     background: rgba(10, 15, 30, 0.6); border: 2px solid rgba(0, 212, 255, 0.2);
@@ -117,20 +136,35 @@ canvas#debugCanvas { display: block; width: 100%; height: 100%; pointer-events: 
 .mode-text-heavy { color: #00d4ff; font-size: 22px; font-weight: bold; margin-bottom: 8px; }
 .mode-text-light { color: #888; font-size: 12px; font-weight: 300; }
 
-/* 强制弹窗居中与自适应滚动 */
-.modal { z-index: 9999 !important; display: flex; align-items: center; justify-content: center; }
-.modal-content {
-    background: rgba(10, 15, 30, 0.95); border: 2px solid #00d4ff;
-    padding: 30px; border-radius: 12px; 
-    width: 85%; max-width: 500px; max-height: 80vh; overflow-y: auto;
-    box-shadow: 0 0 40px rgba(0,212,255,0.5); text-align: left;
+/* ==========================================
+   【v4.5 修改部分】：遮罩层与弹窗极简定位修复
+   ========================================== */
+#modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.7); z-index: 9998; /* 拦截下层一切事件 */
+    pointer-events: auto;
 }
+
+.modal {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 9999; /* 绝对最上层 */
+    display: flex; align-items: center; justify-content: center;
+}
+
+.modal-content {
+    background: rgba(10, 15, 30, 0.95);
+    border: 2px solid #00d4ff;
+    padding: 30px; border-radius: 12px; 
+    width: 85vw; max-width: 500px; max-height: 80vh; overflow-y: auto;
+    box-shadow: 0 0 40px rgba(0,212,255,0.5); 
+    text-align: left;
+    outline: none; /* 移除任何可能的外部虚线或错误分割线 */
+}
+
 .tutorial-text p { color: #ddd; font-size: 16px; line-height: 1.8; margin-bottom: 10px; }
 .tutorial-section p { color: #ccc; font-size: 15px; margin: 8px 0; }
-
-/* 提亮小贴士 */
 .tutorial-tip {
-    font-size: 13px; color: #ffaa00; 
-    font-weight: bold; margin-top: 20px; margin-bottom: 20px;
-    line-height: 1.5; border-top: 1px dashed #444; padding-top: 10px;
+    font-size: 13px; color: #ffaa00; font-weight: bold; 
+    margin-top: 20px; margin-bottom: 20px; line-height: 1.5; 
+    border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 10px;
 }

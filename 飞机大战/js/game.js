@@ -9,7 +9,64 @@ import ObjectPool from './utils/objectPool.js';
 import Wingman from './entities/wingman.js';
 
 // ==========================================
-// 【v4.4 三分化重构】：UnifiedInputSystem 物理隔离
+// 【v4.5 修改部分】：代码音频合成器基建 (AudioController)
+// ==========================================
+class AudioController {
+    constructor() {
+        this.sfxEnabled = true;
+        this.bgmEnabled = true;
+        
+        // 背景音乐加载
+        this.bgm = new Audio('./audio/bgm_space.mp3');
+        this.bgm.loop = true;
+        this.bgm.volume = 0.5;
+        this.audioCtx = null;
+    }
+
+    initCtx() {
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        if (this.bgmEnabled) this.bgm.play().catch(e => console.log('BGM Autoplay blocked.', e));
+    }
+
+    setBGM(enabled) {
+        this.bgmEnabled = enabled;
+        if (enabled && this.audioCtx) this.bgm.play().catch(e=>e);
+        else this.bgm.pause();
+    }
+
+    setSFX(enabled) {
+        this.sfxEnabled = enabled;
+    }
+
+    // 纯代码模拟科幻连发等离子音效，短促、复古且完全无损高频并发
+    playShootSound() {
+        if (!this.sfxEnabled || !this.audioCtx) return;
+        const t = this.audioCtx.currentTime;
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+
+        // 使用三角波（Triangle）产生比方波更柔和、清脆的质感
+        osc.type = 'triangle'; 
+        // 频率指数滑降，形成经典 "啾" 声
+        osc.frequency.setValueAtTime(800, t);
+        osc.frequency.exponentialRampToValueAtTime(150, t + 0.1);
+
+        // 音量急剧衰减，防止爆音
+        gain.gain.setValueAtTime(0.15, t); 
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.1);
+    }
+}
+
+// ==========================================
+// 【v4.5 修改部分】：多端解耦与鼠标逻辑强化
 // ==========================================
 class UnifiedInputSystem {
     constructor() {
@@ -17,37 +74,45 @@ class UnifiedInputSystem {
         this.x = window.innerWidth / 2;
         this.y = window.innerHeight * 0.8;
         this.keys = {};
-        this.touchCount = 0;
-        this.touchTimer = null;
+        
+        this.clickCount = 0;
+        this.clickTimer = null;
         this.activeTempGesture = null;
-        this.isTouching = false;
+        this.mouseMovedRecently = false;
+        this.mouseMoveTimer = null;
 
-        // 全局键盘监听，但在 getInput 时通过 mode 进行阻断
         window.addEventListener('keydown', e => this.keys[e.code] = true);
         window.addEventListener('keyup', e => this.keys[e.code] = false);
 
-        // 全局触屏监听，同样通过 mode 阻断
         const canvas = document.getElementById('gameCanvas');
-        canvas.addEventListener('mousemove', e => {
-            if (this.mode === 'touch') { this.x = e.clientX; this.y = e.clientY; }
-        });
-        canvas.addEventListener('touchstart', e => {
+        
+        // 统一处理触控与鼠标的光标移动
+        const handleMove = (e) => {
             if (this.mode === 'touch') {
-                this.isTouching = true;
-                this.x = e.touches[0].clientX; this.y = e.touches[0].clientY;
-                this.touchCount++;
-                if (this.touchTimer) clearTimeout(this.touchTimer);
-                this.touchTimer = setTimeout(() => {
-                    if (this.touchCount === 2) this.triggerTempGesture('FIST');
-                    else if (this.touchCount >= 3) this.triggerTempGesture('RECOIL');
-                    this.touchCount = 0;
-                }, 280);
+                this.x = e.clientX || (e.touches && e.touches[0].clientX); 
+                this.y = e.clientY || (e.touches && e.touches[0].clientY);
+                this.mouseMovedRecently = true;
+                if (this.mouseMoveTimer) clearTimeout(this.mouseMoveTimer);
+                this.mouseMoveTimer = setTimeout(() => this.mouseMovedRecently = false, 150);
             }
-        });
-        canvas.addEventListener('touchmove', e => {
-            if (this.mode === 'touch') { this.x = e.touches[0].clientX; this.y = e.touches[0].clientY; }
-        });
-        canvas.addEventListener('touchend', () => { this.isTouching = false; });
+        };
+        canvas.addEventListener('mousemove', handleMove);
+        canvas.addEventListener('touchmove', handleMove);
+
+        // 统一处理多击事件 (Double & Triple clicks)
+        const handleDown = (e) => {
+            if (this.mode === 'touch') {
+                this.clickCount++;
+                if (this.clickTimer) clearTimeout(this.clickTimer);
+                this.clickTimer = setTimeout(() => {
+                    if (this.clickCount === 2) this.triggerTempGesture('FIST');
+                    else if (this.clickCount >= 3) this.triggerTempGesture('RECOIL');
+                    this.clickCount = 0;
+                }, 300);
+            }
+        };
+        canvas.addEventListener('mousedown', handleDown);
+        canvas.addEventListener('touchstart', handleDown, { passive: false });
     }
 
     triggerTempGesture(g) {
@@ -60,25 +125,24 @@ class UnifiedInputSystem {
             return gestureEngine.getInputState(); 
         } 
         else if (this.mode === 'keyboard') {
-            // 【纯键盘逻辑】：无视鼠标，移动全靠方向键累加，射击全靠空格
             let gesture = 'IDLE';
             if (this.keys['ArrowLeft']) this.x -= 12;
             if (this.keys['ArrowRight']) this.x += 12;
             if (this.keys['ArrowUp']) this.y -= 12;
             if (this.keys['ArrowDown']) this.y += 12;
 
-            if (this.keys['Space'] && (this.keys['AltLeft'] || this.keys['AltRight'])) gesture = 'RECOIL';
+            // 【v4.5 修改部分】：解绑 Alt，重绑 Space + X
+            if (this.keys['Space'] && this.keys['KeyX']) gesture = 'RECOIL';
             else if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) gesture = 'FIST';
             else if (this.keys['Space']) gesture = 'GUN';
             return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
         } 
         else if (this.mode === 'touch') {
-            // 【纯触屏逻辑】：跟随坐标，拖拽即射击
             let gesture = 'IDLE';
             if (this.activeTempGesture) {
                 gesture = this.activeTempGesture;
-            } else if (this.isTouching) {
-                gesture = 'GUN'; 
+            } else if (this.mouseMovedRecently) {
+                gesture = 'GUN'; // 移动即持续射击
             }
             return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
         }
@@ -170,15 +234,18 @@ class Game {
 
         this.state = 'MENU';
         this.score = 0; 
+        this.checkpointScore = 0; // 【v4.5 修改部分】：记录关卡初始积分
         this.selectedLevel = 1; 
         this.lastTime = performance.now();
         this.deltaTime = 0;
         this.fps = 60;
         this.frameTime = 0; 
+        this.shakeTimer = 0; // 【v4.5 修改部分】：屏幕受击震荡器
 
         this.imageLoader = new ImageLoader(); 
         this.gestureEngine = new GestureEngine();
         this.unifiedInput = new UnifiedInputSystem(); 
+        this.audioController = new AudioController(); // 挂载音频中枢
         this.skillSystem = new SkillSystem();
         this.levelSystem = new LevelSystem();
 
@@ -266,6 +333,8 @@ class Game {
                 this.unifiedInput.mode = card.dataset.mode;
                 document.getElementById('mode-select-screen').classList.add('hidden');
                 
+                // 显示弹窗的同时，开启穿透遮罩层
+                document.getElementById('modal-overlay').classList.remove('hidden');
                 if (this.unifiedInput.mode === 'gesture') document.getElementById('modal-gesture').classList.remove('hidden');
                 else if (this.unifiedInput.mode === 'keyboard') document.getElementById('modal-keyboard').classList.remove('hidden');
                 else document.getElementById('modal-touch').classList.remove('hidden');
@@ -275,11 +344,13 @@ class Game {
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.target.closest('.modal').classList.add('hidden');
+                document.getElementById('modal-overlay').classList.add('hidden'); // 关闭遮罩
                 this.showCampaignScreen(); 
             });
         });
 
         document.getElementById('view-tutorial-btn').addEventListener('click', () => {
+            document.getElementById('modal-overlay').classList.remove('hidden');
             if (this.unifiedInput.mode === 'gesture') document.getElementById('modal-gesture').classList.remove('hidden');
             else if (this.unifiedInput.mode === 'keyboard') document.getElementById('modal-keyboard').classList.remove('hidden');
             else document.getElementById('modal-touch').classList.remove('hidden');
@@ -295,12 +366,23 @@ class Game {
             this.startGame(this.selectedLevel);
         });
 
+        // 音频 UI 监听
+        document.getElementById('toggle-sfx').addEventListener('change', (e) => {
+            this.audioController.setSFX(e.target.checked);
+        });
+        document.getElementById('toggle-bgm').addEventListener('change', (e) => {
+            this.audioController.setBGM(e.target.checked);
+        });
+
         this.pauseBtn.addEventListener('click', () => this.togglePause());
         document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
-        document.getElementById('restart-btn-pause').addEventListener('click', () => location.reload());
+        
+        // 【v4.5 修改部分】：拦截旧的 reload，流转至重启此局逻辑
+        document.getElementById('restart-btn-pause').addEventListener('click', () => {
+            this.restartCurrentLevel();
+        });
         document.getElementById('menu-btn-pause').addEventListener('click', () => location.reload());
 
-        // 【v4.4 修改部分】：文案字典映射更新
         const planeBtns = document.querySelectorAll('.plane-btn');
         planeBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -343,12 +425,14 @@ class Game {
     }
 
     startGame(startLevel = 1) {
+        this.audioController.initCtx(); // 唤醒 Web Audio 引擎
+
         this.gameContainer.style.display = 'block';
         document.getElementById('hud').classList.remove('hidden');
         this.resize();
         this.state = 'PLAYING';
         this.score = 0; 
-        this.lastTime = performance.now();
+        this.checkpointScore = 0; // 记录起点积分
         
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.interactiveWidth);
         this.wingman = new Wingman(this.currentWingmanType, this.imageLoader, this.interactiveWidth);
@@ -376,6 +460,33 @@ class Game {
             this.unifiedInput.y = this.canvas.height * 0.8;
         }
         
+        this.lastTime = performance.now();
+        this.gameLoop(performance.now());
+    }
+
+    // 【v4.5 修改部分】：干净地重置当前关卡，不刷新页面
+    restartCurrentLevel() {
+        this.player.hp = this.player.maxHp;
+        this.player.powerLevel = 0;
+        this.player.shieldCount = 3; 
+        this.bullets = [];
+        this.enemyBullets = [];
+        this.enemies = [];
+        this.powerups = [];
+        if (this.wingman) {
+            this.wingman.defensiveUses = 3;
+            this.wingman.isForcefieldActive = false;
+        }
+        this.boss = null;
+        this.score = this.checkpointScore; // 强行回滚本关所得积分
+        
+        this.levelSystem.timer = 0;
+        this.levelSystem.spawnTimer = 0;
+        this.levelSystem.state = 'SPAWNING';
+        
+        this.pauseScreen.classList.add('hidden');
+        this.state = 'PLAYING';
+        this.lastTime = performance.now();
         this.gameLoop(performance.now());
     }
 
@@ -429,6 +540,12 @@ class Game {
 
     handlePlayerDamage(damageAmount) {
         if (this.player.isInvincible) return; 
+        
+        // 【v4.5 修改部分】：非无敌、非护盾状态下，触发震荡反馈拦截点
+        if (!this.player.isShieldActive) {
+            this.shakeTimer = 0.25; 
+        }
+
         this.player.hp -= damageAmount;
         if (this.player.hp <= 0) {
             this.player.lives--;
@@ -447,6 +564,9 @@ class Game {
         if (!this.player) return;
         this.skillSystem.update(this.deltaTime);
         this.levelSystem.update(this.deltaTime, this);
+        
+        // 维持震荡时间衰减
+        if (this.shakeTimer > 0) this.shakeTimer -= this.deltaTime;
 
         const rawInput = this.unifiedInput.getInput(this.gestureEngine);
         const clampedInput = { ...rawInput };
@@ -463,6 +583,9 @@ class Game {
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
         
         if (shouldShoot) { 
+            // 【v4.5 修改部分】：挂载音频合成触发钩子
+            this.audioController.playShootSound();
+
             if (this.wingman) this.wingman.shoot(this); 
             const px = this.player.x; const py = this.player.y - this.player.height / 2;
             const bType = this.player.bulletType;
@@ -571,6 +694,12 @@ class Game {
 
         if (this.boss) {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
+            
+            // 当 Boss 被击败时，记录 Checkpoint，为“重新开始本局”提供积分回滚点
+            if (!this.boss.active && this.boss.health <= 0) {
+                this.checkpointScore = this.score;
+            }
+
             if (this.boss.shouldShoot()) this.boss.shoot(this);
             this.bullets.forEach(b => {
                 if (b.active && b.state === 'FLYING') {
@@ -611,7 +740,6 @@ class Game {
             hpFill.style.background = hpPct > 30 ? 'linear-gradient(90deg, #ff0055, #00d4ff)' : '#ff0055';
         }
 
-        // 【v4.4 修改部分】：大招文字逻辑覆写
         const ultTextEl = document.getElementById('ult-text');
         if (ultTextEl) {
             if (this.skillSystem.isReady()) {
@@ -624,6 +752,15 @@ class Game {
 
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // 【v4.5 修改部分】：渲染基质沙盒，引入动态屏幕震荡
+        this.ctx.save();
+        if (this.shakeTimer > 0) {
+            const dx = (Math.random() - 0.5) * 15;
+            const dy = (Math.random() - 0.5) * 15;
+            this.ctx.translate(dx, dy);
+        }
+
         this.ctx.save(); this.ctx.setLineDash([5, 15]); this.ctx.lineWidth = 2; this.ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
         this.ctx.beginPath(); this.ctx.moveTo(this.playArea.minX, 0); this.ctx.lineTo(this.playArea.minX, this.canvas.height);
         this.ctx.moveTo(this.playArea.maxX, 0); this.ctx.lineTo(this.playArea.maxX, this.canvas.height);
@@ -641,6 +778,20 @@ class Game {
         if (this.wingman) this.wingman.draw(this.ctx, this.player); 
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemyBullets.forEach(b => b.draw(this.ctx));
+        
+        // 归位震荡系
+        this.ctx.restore();
+
+        // 【v4.5 修改部分】：渲染定向受击血边反馈 (Vignette)
+        if (this.shakeTimer > 0) {
+            const alpha = Math.min(1, this.shakeTimer / 0.2) * 0.6; // 衰减透明度，最大 60%
+            this.ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, 20); // 顶
+            this.ctx.fillRect(0, this.canvas.height - 20, this.canvas.width, 20); // 底
+            this.ctx.fillRect(0, 0, 20, this.canvas.height); // 左
+            this.ctx.fillRect(this.canvas.width - 20, 0, 20, this.canvas.height); // 右
+        }
+
         this.drawPerformanceMonitor();
     }
 

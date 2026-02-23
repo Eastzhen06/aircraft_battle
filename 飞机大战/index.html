@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - OS2 指尖长空 v4.4</title>
+    <title>飞机大战 - OS2 指尖长空 v4.5</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
@@ -37,22 +37,18 @@
                 <button class="wingman-btn" data-type="magnetic">磁吸型僚机</button>
             </div>
         </div>
-        
         <button id="start-btn" class="btn primary" style="margin-top: 20px; font-size: 1.5em; padding: 15px 40px;">进入作战系统</button>
     </div>
 
     <div id="mode-select-screen" class="screen hidden os2-panel">
         <h2 style="color: #00d4ff; margin-bottom: 30px; font-size: 2.2em; text-shadow: 0 0 10px #00d4ff;">请选择战机控制模式</h2>
         <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 40px; align-items: stretch;">
-            
             <div class="mode-card" data-mode="keyboard" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="mode-text-flat">全键盘操作</div>
             </div>
-            
             <div class="mode-card" data-mode="touch" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="mode-text-flat">鼠标/触屏滑动</div>
             </div>
-            
             <div class="mode-card" data-mode="gesture" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="mode-text-heavy">手势控制</div>
                 <div class="mode-text-light">沉浸式视觉交互</div>
@@ -61,9 +57,11 @@
         <button id="back-from-mode-btn" class="btn secondary" style="width: 200px; padding: 10px;">返回主菜单</button>
     </div>
 
-    <div id="modal-gesture" class="modal hidden os2-panel">
+    <div id="modal-overlay" class="hidden"></div>
+
+    <div id="modal-gesture" class="modal hidden">
         <div class="modal-content">
-            <h2 style="color: #00d4ff; margin-bottom: 15px;">👋 手势作战指南</h2>
+            <h2 style="color: #00d4ff; margin-bottom: 15px;">👋 手势作战指南 (Beta)</h2>
             <div class="tutorial-text">
                 <p>👉 <strong>自动射击：</strong> 保持【手枪】姿势，系统将锁定开火。</p>
                 <p>✊ <strong>保护罩：</strong> 握紧【拳头】，展开高能偏导护盾。</p>
@@ -74,29 +72,29 @@
         </div>
     </div>
 
-    <div id="modal-keyboard" class="modal hidden os2-panel">
+    <div id="modal-keyboard" class="modal hidden">
         <div class="modal-content">
             <h2 style="color: #00FF44; margin-bottom: 15px;">⌨️ 键盘先锋指南</h2>
             <div class="tutorial-section">
                 <p><strong>方向键 (↑↓←→)：</strong> 控制战机上下左右移动</p>
                 <p><strong>Space键 (空格)：</strong> 持续射击</p>
                 <p><strong>Shift键：</strong> 开启保护罩</p>
-                <p><strong>Space + Alt：</strong> 释放大招</p>
+                <p><strong>Space + X键：</strong> 释放大招</p>
             </div>
-            <p class="tutorial-tip">小贴士：释放大招时，请务必先按住空格键，再按下 Alt 键，否则可能会与系统的其他快捷键冲突引发意外跳转~</p>
+            <p class="tutorial-tip">小贴士：释放大招时，请务必先按住空格键，再按下 X 键。请保持英文输入法状态以防冲突！</p>
             <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
         </div>
     </div>
 
-    <div id="modal-touch" class="modal hidden os2-panel">
+    <div id="modal-touch" class="modal hidden">
         <div class="modal-content">
             <h2 style="color: #00FF44; margin-bottom: 15px;">📱 触控/鼠标达人</h2>
             <div class="tutorial-section">
-                <p><strong>单指/鼠标拖拽：</strong> 丝滑走位并自动射击</p>
+                <p><strong>单指/光标滑动：</strong> 丝滑走位并自动射击</p>
                 <p><strong>快速双击：</strong> 开启保护罩</p>
                 <p><strong>快速三击：</strong> 释放大招</p>
             </div>
-            <p class="tutorial-tip">小贴士：触控模式下双击和三击需要快速连续点击同一位置才能精准触发哦！</p>
+            <p class="tutorial-tip">小贴士：双击和三击需要快速连续点击屏幕同一位置才能精准触发哦！</p>
             <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
         </div>
     </div>
@@ -105,8 +103,8 @@
         <div class="campaign-split-layout">
             <div class="split-left">
                 <h2 class="split-title">选择开始关卡</h2>
-                <p class="split-subtitle">请点击关卡序号--决定无尽模式开始关卡</p>
-                <div id="level-grid" class="level-grid" style="margin-top: 20px;"></div>
+                <p class="split-subtitle">请点击关卡序号--决定<span class="highlight-text">无尽模式</span>开始关卡</p>
+                <div id="level-grid" class="level-grid"></div>
             </div>
             <div class="split-right">
                 <h3 style="color: #00FF44; margin-top:0; border-bottom: 1px solid #00FF44; padding-bottom: 5px;">当前载入模式</h3>
@@ -132,8 +130,8 @@
         <div id="pause-screen" class="screen hidden os2-panel">
             <h2 style="color: #00d4ff; text-shadow: 0 0 20px #00d4ff; font-size: 3em;">系统已挂起</h2>
             <div class="pause-menu" style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
-                <button id="resume-btn" class="btn primary">恢复执行</button>
-                <button id="restart-btn-pause" class="btn warning">重新加载环境</button>
+                <button id="resume-btn" class="btn primary">继续游戏</button>
+                <button id="restart-btn-pause" class="btn warning">重新开始此局</button>
                 <button id="menu-btn-pause" class="btn secondary">强制断开连接</button>
             </div>
         </div>
@@ -146,7 +144,18 @@
             <div class="hud-right">
                 <div class="hud-item" style="justify-content: flex-end;"><span id="lives-count" class="hud-value" style="color: #ff4444; font-size: 24px;">❤️ x 3</span></div>
                 <div class="hud-item"><span class="hud-label">生命值</span><div id="health-bar" class="health-bar"><div id="health-fill" class="health-fill"></div></div></div>
-                 <div class="hud-item"><div id="shield-icon-container"><span class="hud-label">保护罩</span><span id="shield-count" class="hud-value" style="color: #00d4ff;">🛡️ x 3</span></div></div>
+                <div class="hud-item"><div id="shield-icon-container"><span class="hud-label">保护罩</span><span id="shield-count" class="hud-value" style="color: #00d4ff;">🛡️ x 3</span></div></div>
+                
+                <div class="audio-panel">
+                    <div class="audio-row">
+                        <span class="audio-label">音效</span>
+                        <input type="checkbox" id="toggle-sfx" class="toggle-switch" checked>
+                    </div>
+                    <div class="audio-row">
+                        <span class="audio-label">音乐</span>
+                        <input type="checkbox" id="toggle-bgm" class="toggle-switch" checked>
+                    </div>
+                </div>
             </div>
         </div>
         <div id="ult-container" class="hidden os2-panel"><div id="ult-fill"></div><span id="ult-text">0%</span></div>
