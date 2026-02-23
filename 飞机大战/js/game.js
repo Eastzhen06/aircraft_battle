@@ -66,7 +66,7 @@ class AudioController {
 }
 
 // ==========================================
-// 【v4.5 修改部分】：多端解耦与鼠标逻辑强化
+// 【v4.5.2 修改部分】：多端解耦与鼠标逻辑强化
 // ==========================================
 class UnifiedInputSystem {
     constructor() {
@@ -78,8 +78,6 @@ class UnifiedInputSystem {
         this.clickCount = 0;
         this.clickTimer = null;
         this.activeTempGesture = null;
-        this.mouseMovedRecently = false;
-        this.mouseMoveTimer = null;
 
         window.addEventListener('keydown', e => this.keys[e.code] = true);
         window.addEventListener('keyup', e => this.keys[e.code] = false);
@@ -91,9 +89,7 @@ class UnifiedInputSystem {
             if (this.mode === 'touch') {
                 this.x = e.clientX || (e.touches && e.touches[0].clientX); 
                 this.y = e.clientY || (e.touches && e.touches[0].clientY);
-                this.mouseMovedRecently = true;
-                if (this.mouseMoveTimer) clearTimeout(this.mouseMoveTimer);
-                this.mouseMoveTimer = setTimeout(() => this.mouseMovedRecently = false, 150);
+                // 废弃原有的 150ms 超时断火机制，彻底解决无故不发射子弹的 Bug
             }
         };
         canvas.addEventListener('mousemove', handleMove);
@@ -131,18 +127,17 @@ class UnifiedInputSystem {
             if (this.keys['ArrowUp']) this.y -= 12;
             if (this.keys['ArrowDown']) this.y += 12;
 
-            // 【v4.5 修改部分】：解绑 Alt，重绑 Space + X
-            if (this.keys['Space'] && this.keys['KeyX']) gesture = 'RECOIL';
+            // 【v4.5.2 修改部分】：解绑 Space + X，重绑 Space + A
+            if (this.keys['Space'] && this.keys['KeyA']) gesture = 'RECOIL';
             else if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) gesture = 'FIST';
             else if (this.keys['Space']) gesture = 'GUN';
             return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
         } 
         else if (this.mode === 'touch') {
-            let gesture = 'IDLE';
+            // 【v4.5.2 修改部分】：鼠标与触控模式默认常驻射击状态，保证火力不断
+            let gesture = 'GUN'; 
             if (this.activeTempGesture) {
                 gesture = this.activeTempGesture;
-            } else if (this.mouseMovedRecently) {
-                gesture = 'GUN'; // 移动即持续射击
             }
             return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
         }
@@ -164,53 +159,86 @@ const CAMPAIGN_LEVELS = [
 
 class Powerup {
     constructor() {
-        this.active = false; this.x = 0; this.y = 0;
-        this.width = 40; this.height = 40;
-        this.type = 'HEALTH'; this.speed = 100;
-        this.angle = 0; this.pulsePhase = 0;
+        this.active = false; 
+        this.x = 0; 
+        this.y = 0;
+        this.width = 40; 
+        this.height = 40;
+        this.type = 'HEALTH'; 
+        this.speed = 100;
+        this.angle = 0; 
+        this.pulsePhase = 0;
     }
+    
     spawn(x, y) {
-        this.active = true; this.x = x; this.y = y; this.isMagnetized = false; 
+        this.active = true; 
+        this.x = x; 
+        this.y = y; 
+        this.isMagnetized = false; 
         const r = Math.random();
-        if (r < 0.33) this.type = 'HEALTH'; else if (r < 0.66) this.type = 'POWER'; else this.type = 'SHIELD';
+        if (r < 0.33) this.type = 'HEALTH'; 
+        else if (r < 0.66) this.type = 'POWER'; 
+        else this.type = 'SHIELD';
     }
+    
     update(deltaTime, canvasHeight, player) {
         if (!this.active) return;
         if (this.isMagnetized && player) {
-            const dx = player.x - this.x; const dy = player.y - this.y;
+            const dx = player.x - this.x; 
+            const dy = player.y - this.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > 0) { this.x += (dx / dist) * 500 * deltaTime; this.y += (dy / dist) * 500 * deltaTime; }
+            if (dist > 0) { 
+                this.x += (dx / dist) * 500 * deltaTime; 
+                this.y += (dy / dist) * 500 * deltaTime; 
+            }
         } else {
             this.y += this.speed * deltaTime;
         }
-        this.angle += deltaTime * 2; this.pulsePhase += deltaTime * 5;
+        this.angle += deltaTime * 2; 
+        this.pulsePhase += deltaTime * 5;
         if (this.y > canvasHeight + this.height) this.active = false;
     }
+    
     draw(ctx) {
         if (!this.active) return;
-        ctx.save(); ctx.translate(this.x, this.y);
+        ctx.save(); 
+        ctx.translate(this.x, this.y);
         const pulse = 1 + Math.sin(this.pulsePhase) * 0.1;
-        ctx.scale(pulse, pulse); ctx.rotate(this.angle);
+        ctx.scale(pulse, pulse); 
+        ctx.rotate(this.angle);
 
         let color, symbol;
         if (this.type === 'HEALTH') { color = '#00FF44'; symbol = '✚'; } 
         else if (this.type === 'POWER') { color = '#FF4400'; symbol = '⚡'; } 
         else if (this.type === 'SHIELD') { color = '#00CCFF'; symbol = '⛨'; }
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; ctx.strokeStyle = color; ctx.lineWidth = 2;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; 
+        ctx.strokeStyle = color; 
+        ctx.lineWidth = 2;
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
             const angle = (Math.PI * 2 / 6) * i - Math.PI / 2;
-            const px = Math.cos(angle) * (this.width / 2); const py = Math.sin(angle) * (this.height / 2);
-            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            const px = Math.cos(angle) * (this.width / 2); 
+            const py = Math.sin(angle) * (this.height / 2);
+            if (i === 0) ctx.moveTo(px, py); 
+            else ctx.lineTo(px, py);
         }
-        ctx.closePath(); ctx.fill(); 
-        ctx.save(); ctx.globalAlpha = 0.3; ctx.lineWidth = 6; ctx.stroke(); ctx.restore();
+        ctx.closePath(); 
+        ctx.fill(); 
+        
+        ctx.save(); 
+        ctx.globalAlpha = 0.3; 
+        ctx.lineWidth = 6; 
+        ctx.stroke(); 
+        ctx.restore();
         ctx.stroke(); 
 
         ctx.rotate(-this.angle);
-        ctx.fillStyle = color; ctx.font = `bold ${this.width * 0.5}px Arial`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(symbol, 0, 0);
+        ctx.fillStyle = color; 
+        ctx.font = `bold ${this.width * 0.5}px Arial`;
+        ctx.textAlign = 'center'; 
+        ctx.textBaseline = 'middle'; 
+        ctx.fillText(symbol, 0, 0);
         ctx.restore();
     }
 }
@@ -234,18 +262,19 @@ class Game {
 
         this.state = 'MENU';
         this.score = 0; 
-        this.checkpointScore = 0; // 【v4.5 修改部分】：记录关卡初始积分
+        this.checkpointScore = 0; 
         this.selectedLevel = 1; 
+        
         this.lastTime = performance.now();
         this.deltaTime = 0;
         this.fps = 60;
         this.frameTime = 0; 
-        this.shakeTimer = 0; // 【v4.5 修改部分】：屏幕受击震荡器
+        this.shakeTimer = 0;
 
         this.imageLoader = new ImageLoader(); 
         this.gestureEngine = new GestureEngine();
         this.unifiedInput = new UnifiedInputSystem(); 
-        this.audioController = new AudioController(); // 挂载音频中枢
+        this.audioController = new AudioController(); 
         this.skillSystem = new SkillSystem();
         this.levelSystem = new LevelSystem();
 
@@ -333,7 +362,6 @@ class Game {
                 this.unifiedInput.mode = card.dataset.mode;
                 document.getElementById('mode-select-screen').classList.add('hidden');
                 
-                // 显示弹窗的同时，开启穿透遮罩层
                 document.getElementById('modal-overlay').classList.remove('hidden');
                 if (this.unifiedInput.mode === 'gesture') document.getElementById('modal-gesture').classList.remove('hidden');
                 else if (this.unifiedInput.mode === 'keyboard') document.getElementById('modal-keyboard').classList.remove('hidden');
@@ -344,7 +372,7 @@ class Game {
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.target.closest('.modal').classList.add('hidden');
-                document.getElementById('modal-overlay').classList.add('hidden'); // 关闭遮罩
+                document.getElementById('modal-overlay').classList.add('hidden'); 
                 this.showCampaignScreen(); 
             });
         });
@@ -366,7 +394,6 @@ class Game {
             this.startGame(this.selectedLevel);
         });
 
-        // 音频 UI 监听
         document.getElementById('toggle-sfx').addEventListener('change', (e) => {
             this.audioController.setSFX(e.target.checked);
         });
@@ -377,7 +404,6 @@ class Game {
         this.pauseBtn.addEventListener('click', () => this.togglePause());
         document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
         
-        // 【v4.5 修改部分】：拦截旧的 reload，流转至重启此局逻辑
         document.getElementById('restart-btn-pause').addEventListener('click', () => {
             this.restartCurrentLevel();
         });
@@ -425,14 +451,14 @@ class Game {
     }
 
     startGame(startLevel = 1) {
-        this.audioController.initCtx(); // 唤醒 Web Audio 引擎
+        this.audioController.initCtx(); 
 
         this.gameContainer.style.display = 'block';
         document.getElementById('hud').classList.remove('hidden');
         this.resize();
         this.state = 'PLAYING';
         this.score = 0; 
-        this.checkpointScore = 0; // 记录起点积分
+        this.checkpointScore = 0; 
         
         this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.interactiveWidth);
         this.wingman = new Wingman(this.currentWingmanType, this.imageLoader, this.interactiveWidth);
@@ -464,7 +490,6 @@ class Game {
         this.gameLoop(performance.now());
     }
 
-    // 【v4.5 修改部分】：干净地重置当前关卡，不刷新页面
     restartCurrentLevel() {
         this.player.hp = this.player.maxHp;
         this.player.powerLevel = 0;
@@ -478,7 +503,7 @@ class Game {
             this.wingman.isForcefieldActive = false;
         }
         this.boss = null;
-        this.score = this.checkpointScore; // 强行回滚本关所得积分
+        this.score = this.checkpointScore; 
         
         this.levelSystem.timer = 0;
         this.levelSystem.spawnTimer = 0;
@@ -519,29 +544,44 @@ class Game {
 
     spawnBullet(x, y, speed, damage, type, offset = 0) {
         const b = this.playerBulletPool.get();
-        b.x = x; b.y = y; b.speed = speed; b.damage = damage; 
-        b.type = type; b.angleOffset = offset; b.state = 'FLYING'; b.timer = 0;
+        b.x = x; 
+        b.y = y; 
+        b.speed = speed; 
+        b.damage = damage; 
+        b.type = type; 
+        b.angleOffset = offset; 
+        b.state = 'FLYING'; 
+        b.timer = 0;
+        
         if (type === 'pierce') { b.width=10; b.height=30; b.color='#ff0055'; b.isPiercing=true; }
         else if (type === 'spread') { b.width=4; b.height=10; b.color='#ffff00'; b.isPiercing=false; }
         else if (type === 'bomb') { b.width=20; b.height=20; b.color='#9900ff'; b.isPiercing=false; }
         else { b.width=4; b.height=12; b.color='#00d4ff'; b.isPiercing=false; }
+        
         if (!this.bullets.includes(b)) this.bullets.push(b);
     }
 
     spawnEnemyBullet(x, y, speed, damage, angle = 0, isLaser = false) {
         const b = this.enemyBulletPool.get();
-        b.x = x; b.y = y; b.speed = -speed; 
-        b.damage = damage; b.type = 'enemy'; b.angleOffset = angle; b.state = 'FLYING'; b.timer = 0;
-        b.width = isLaser ? 8 : 6; b.height = isLaser ? 25 : 6;
+        b.x = x; 
+        b.y = y; 
+        b.speed = -speed; 
+        b.damage = damage; 
+        b.type = 'enemy'; 
+        b.angleOffset = angle; 
+        b.state = 'FLYING'; 
+        b.timer = 0;
+        b.width = isLaser ? 8 : 6; 
+        b.height = isLaser ? 25 : 6;
         b.color = isLaser ? '#ff00ff' : '#ff5500';
         b.isPiercing = isLaser;
+        
         if (!this.enemyBullets.includes(b)) this.enemyBullets.push(b);
     }
 
     handlePlayerDamage(damageAmount) {
         if (this.player.isInvincible) return; 
         
-        // 【v4.5 修改部分】：非无敌、非护盾状态下，触发震荡反馈拦截点
         if (!this.player.isShieldActive) {
             this.shakeTimer = 0.25; 
         }
@@ -565,7 +605,6 @@ class Game {
         this.skillSystem.update(this.deltaTime);
         this.levelSystem.update(this.deltaTime, this);
         
-        // 维持震荡时间衰减
         if (this.shakeTimer > 0) this.shakeTimer -= this.deltaTime;
 
         const rawInput = this.unifiedInput.getInput(this.gestureEngine);
@@ -583,21 +622,24 @@ class Game {
         const shouldShoot = this.player.update(clampedInput, this.deltaTime, this.canvas, this.skillSystem);
         
         if (shouldShoot) { 
-            // 【v4.5 修改部分】：挂载音频合成触发钩子
             this.audioController.playShootSound();
 
             if (this.wingman) this.wingman.shoot(this); 
-            const px = this.player.x; const py = this.player.y - this.player.height / 2;
+            const px = this.player.x; 
+            const py = this.player.y - this.player.height / 2;
             const bType = this.player.bulletType;
             const pl = this.player.powerLevel || 0;
             
             if (bType === 'straight') { 
-                this.spawnBullet(px-10, py, 800, 10, 'straight'); this.spawnBullet(px+10, py, 800, 10, 'straight'); 
+                this.spawnBullet(px-10, py, 800, 10, 'straight'); 
+                this.spawnBullet(px+10, py, 800, 10, 'straight'); 
                 if (pl >= 1) { this.spawnBullet(px-25, py+10, 800, 10, 'straight'); this.spawnBullet(px+25, py+10, 800, 10, 'straight'); }
                 if (pl >= 2) { this.spawnBullet(px, py-10, 800, 15, 'straight'); }
             } 
             else if (bType === 'spread') { 
-                this.spawnBullet(px, py, 800, 6, 'spread', -0.2); this.spawnBullet(px, py, 800, 6, 'spread', 0); this.spawnBullet(px, py, 800, 6, 'spread', 0.2); 
+                this.spawnBullet(px, py, 800, 6, 'spread', -0.2); 
+                this.spawnBullet(px, py, 800, 6, 'spread', 0); 
+                this.spawnBullet(px, py, 800, 6, 'spread', 0.2); 
                 if (pl >= 1) { this.spawnBullet(px, py+10, 800, 6, 'spread', -0.4); this.spawnBullet(px, py+10, 800, 6, 'spread', 0.4); }
                 if (pl >= 2) { this.spawnBullet(px-15, py, 800, 6, 'spread', -0.1); this.spawnBullet(px+15, py, 800, 6, 'spread', 0.1); }
             } 
@@ -648,13 +690,40 @@ class Game {
                     const fx = this.wingman.left.x - this.wingman.width;
                     const fh = (this.wingman.left.y - this.player.y) + this.player.height + 40;
                     const fy = this.player.y - this.player.height;
-                    if (b.x > fx && b.x < fx + fw && b.y > fy && b.y < fy + fh) { b.active = false; return; }
+                    if (b.x > fx && b.x < fx + fw && b.y > fy && b.y < fy + fh) { 
+                        b.active = false; 
+                        return; 
+                    }
                 }
+                
                 if (Math.abs(b.x - this.player.x) < hitZoneX && Math.abs(b.y - this.player.y) < hitZoneY) {
-                    this.handlePlayerDamage(b.damage); b.active = false;
+                    this.handlePlayerDamage(b.damage); 
+                    b.active = false;
                 }
             }
         });
+
+        // 【v4.5.2 核心】：Boss 激光光波与玩家战机的持续帧级碰撞判定
+        if (this.boss && this.boss.isLaserSweeping) {
+            const laserRects = this.boss.getLaserRects(this.canvas.height);
+            for (let rect of laserRects) {
+                // 如果玩家进入紫色光波范围内
+                if (this.player.x + this.player.width/2 > rect.x && 
+                    this.player.x - this.player.width/2 < rect.x + rect.w &&
+                    this.player.y + this.player.height/2 > rect.y && 
+                    this.player.y - this.player.height/2 < rect.y + rect.h) {
+                    
+                    if (this.player.isShieldActive) {
+                        // 护盾被快速攻破 (以 5 倍速缩减护盾存活时间)
+                        if (this.player.reduceShield) this.player.reduceShield(this.deltaTime * 5); 
+                    } else if (!this.player.isInvincible) {
+                        // 防御罩破裂后，进行每秒 150 点的高速致命扣血
+                        this.handlePlayerDamage(150 * this.deltaTime); 
+                    }
+                    break; // 防止两条光波交叉时受到双倍扣血惩罚
+                }
+            }
+        }
 
         this.enemies.forEach(e => {
             e.update(this.deltaTime, this.canvas.height, this.playArea, this);
@@ -663,18 +732,24 @@ class Game {
                     if (b.active && b.state === 'FLYING') {
                         let collision = false;
                         if (b.type === 'bomb') {
-                            const collX = (e.width/2 * 0.7) + (b.width/2 * 0.5); const collY = (e.height/2 * 0.7) + (b.height/2 * 0.5);
+                            const collX = (e.width/2 * 0.7) + (b.width/2 * 0.5); 
+                            const collY = (e.height/2 * 0.7) + (b.height/2 * 0.5);
                             collision = Math.abs(b.x - e.x) < collX && Math.abs(b.y - e.y) < collY;
                         } else {
                             collision = Math.abs(b.x - e.x) < (e.width/2 + b.width/2) && Math.abs(b.y - e.y) < (e.height/2 + b.height/2);
                         }
+                        
                         if (collision) {
                             const killed = e.takeDamage(b.damage);
-                            if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } else if (!b.isPiercing) { b.active = false; }
+                            if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } 
+                            else if (!b.isPiercing) { b.active = false; }
+                            
                             if (killed) { 
-                                this.skillSystem.addEnergy(10); this.score += e.scoreValue; 
+                                this.skillSystem.addEnergy(10); 
+                                this.score += e.scoreValue; 
                                 if (e.type === 3 || (e.type === 2 && Math.random() < 0.4)) {
-                                    const p = this.powerupPool.get(); p.spawn(e.x, e.y);
+                                    const p = this.powerupPool.get(); 
+                                    p.spawn(e.x, e.y);
                                     if (!this.powerups.includes(p)) this.powerups.push(p);
                                 }
                             }
@@ -682,10 +757,13 @@ class Game {
                     }
                 });
 
-                if (Math.abs(e.x - this.player.x) < (e.width/2 + this.player.width/2 * 0.8) && Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
+                if (Math.abs(e.x - this.player.x) < (e.width/2 + this.player.width/2 * 0.8) && 
+                    Math.abs(e.y - this.player.y) < (e.height/2 + this.player.height/2 * 0.8)) {
                     e.active = false; 
                     if (!this.player.isInvincible) {
-                        let crashDamage = 10; if (e.type === 2) crashDamage = 30; if (e.type === 3) crashDamage = 60;  
+                        let crashDamage = 10; 
+                        if (e.type === 2) crashDamage = 30; 
+                        if (e.type === 3) crashDamage = 60;  
                         this.handlePlayerDamage(crashDamage);
                     }
                 }
@@ -695,7 +773,7 @@ class Game {
         if (this.boss) {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
             
-            // 当 Boss 被击败时，记录 Checkpoint，为“重新开始本局”提供积分回滚点
+            // 【v4.5.2 核心】：当 Boss 被击败时，记录 Checkpoint
             if (!this.boss.active && this.boss.health <= 0) {
                 this.checkpointScore = this.score;
             }
@@ -705,14 +783,16 @@ class Game {
                 if (b.active && b.state === 'FLYING') {
                     let collision = false;
                     if (b.type === 'bomb') {
-                        const collX = (this.boss.width/2 * 0.7) + (b.width/2 * 0.5); const collY = (this.boss.height/2 * 0.7) + (b.height/2 * 0.5);
+                        const collX = (this.boss.width/2 * 0.7) + (b.width/2 * 0.5); 
+                        const collY = (this.boss.height/2 * 0.7) + (b.height/2 * 0.5);
                         collision = Math.abs(b.x - this.boss.x) < collX && Math.abs(b.y - this.boss.y) < collY;
                     } else {
                         collision = Math.abs(b.x - this.boss.x) < (this.boss.width/2 + b.width/2) && Math.abs(b.y - this.boss.y) < (this.boss.height/2 + b.height/2);
                     }
                     if (collision) {
                         const bossKilled = this.boss.takeDamage(b.damage);
-                        if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } else if (!b.isPiercing) { b.active = false; }
+                        if (b.type === 'bomb') { b.state = 'EXPLODING'; b.timer = 0; } 
+                        else if (!b.isPiercing) { b.active = false; }
                         if (bossKilled) this.score += this.boss.scoreValue;
                     }
                 }
@@ -753,7 +833,6 @@ class Game {
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // 【v4.5 修改部分】：渲染基质沙盒，引入动态屏幕震荡
         this.ctx.save();
         if (this.shakeTimer > 0) {
             const dx = (Math.random() - 0.5) * 15;
@@ -761,10 +840,17 @@ class Game {
             this.ctx.translate(dx, dy);
         }
 
-        this.ctx.save(); this.ctx.setLineDash([5, 15]); this.ctx.lineWidth = 2; this.ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
-        this.ctx.beginPath(); this.ctx.moveTo(this.playArea.minX, 0); this.ctx.lineTo(this.playArea.minX, this.canvas.height);
-        this.ctx.moveTo(this.playArea.maxX, 0); this.ctx.lineTo(this.playArea.maxX, this.canvas.height);
-        this.ctx.stroke(); this.ctx.restore();
+        this.ctx.save(); 
+        this.ctx.setLineDash([5, 15]); 
+        this.ctx.lineWidth = 2; 
+        this.ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+        this.ctx.beginPath(); 
+        this.ctx.moveTo(this.playArea.minX, 0); 
+        this.ctx.lineTo(this.playArea.minX, this.canvas.height);
+        this.ctx.moveTo(this.playArea.maxX, 0); 
+        this.ctx.lineTo(this.playArea.maxX, this.canvas.height);
+        this.ctx.stroke(); 
+        this.ctx.restore();
         
         if (this.skillSystem.state === 'ACTIVE') {
             this.ctx.fillStyle = `rgba(255, 0, 85, ${0.1 + Math.random() * 0.1})`;
@@ -779,27 +865,29 @@ class Game {
         this.bullets.forEach(b => b.draw(this.ctx));
         this.enemyBullets.forEach(b => b.draw(this.ctx));
         
-        // 归位震荡系
         this.ctx.restore();
 
-        // 【v4.5 修改部分】：渲染定向受击血边反馈 (Vignette)
         if (this.shakeTimer > 0) {
-            const alpha = Math.min(1, this.shakeTimer / 0.2) * 0.6; // 衰减透明度，最大 60%
+            const alpha = Math.min(1, this.shakeTimer / 0.2) * 0.6; 
             this.ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
-            this.ctx.fillRect(0, 0, this.canvas.width, 20); // 顶
-            this.ctx.fillRect(0, this.canvas.height - 20, this.canvas.width, 20); // 底
-            this.ctx.fillRect(0, 0, 20, this.canvas.height); // 左
-            this.ctx.fillRect(this.canvas.width - 20, 0, 20, this.canvas.height); // 右
+            this.ctx.fillRect(0, 0, this.canvas.width, 20); 
+            this.ctx.fillRect(0, this.canvas.height - 20, this.canvas.width, 20); 
+            this.ctx.fillRect(0, 0, 20, this.canvas.height); 
+            this.ctx.fillRect(this.canvas.width - 20, 0, 20, this.canvas.height); 
         }
 
         this.drawPerformanceMonitor();
     }
 
     drawPerformanceMonitor() {
-        const x = this.canvas.width - 150; const y = this.canvas.height - 60;
-        this.ctx.font = '12px Orbitron, Courier New'; this.ctx.textAlign = 'left';
-        this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00d4ff'; this.ctx.fillText(`FPS: ${Math.round(this.fps)}`, x, y);
-        this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00d4ff'; this.ctx.fillText(`FT:  ${this.frameTime.toFixed(1)}ms`, x, y + 15);
+        const x = this.canvas.width - 150; 
+        const y = this.canvas.height - 60;
+        this.ctx.font = '12px Orbitron, Courier New'; 
+        this.ctx.textAlign = 'left';
+        this.ctx.fillStyle = this.fps < 45 ? '#ff4444' : '#00d4ff'; 
+        this.ctx.fillText(`FPS: ${Math.round(this.fps)}`, x, y);
+        this.ctx.fillStyle = this.frameTime > 16.6 ? '#ffaa00' : '#00d4ff'; 
+        this.ctx.fillText(`FT:  ${this.frameTime.toFixed(1)}ms`, x, y + 15);
     }
 }
 

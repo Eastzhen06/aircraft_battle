@@ -13,17 +13,11 @@ export default class Player {
         const config = PLANE_TYPES[type];
         this.image = imageLoader.get(config.asset);
         
-        // 【修复 5】战机尺寸基于交互区宽度计算，10% 占比
         this.width = interactiveWidth * 0.10; 
-        if (this.image && this.image.width > 0) {
-            this.height = this.width * (this.image.height / this.image.width);
-        } else {
-            this.height = this.width;
-        }
+        if (this.image && this.image.width > 0) this.height = this.width * (this.image.height / this.image.width);
+        else this.height = this.width;
 
-        this.x = x;
-        this.y = y;
-        
+        this.x = x; this.y = y;
         this.config = config;
         this.maxHp = config.hp * 3; 
         this.hp = this.maxHp;
@@ -96,6 +90,19 @@ export default class Player {
             this.shieldCount--;
             this.isShieldActive = true;
             this.shieldTimer = this.shieldDuration;
+        }
+    }
+
+    // 【v4.5.2 新增】：响应光波扫射的快速破甲接口
+    reduceShield(amount) {
+        if (this.isShieldActive) {
+            this.shieldTimer -= amount;
+            if (this.shieldTimer <= 0) {
+                this.isShieldActive = false;
+                // 护盾爆裂后给予极短暂的无敌，防止下一帧直接被秒杀
+                this.isBlinking = true;
+                this.blinkTimer = 0.5;
+            }
         }
     }
     

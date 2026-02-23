@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - OS2 指尖长空 v4.5</title>
+    <title>飞机大战 - OS2 指尖长空 v4.5.2</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
@@ -79,9 +79,9 @@
                 <p><strong>方向键 (↑↓←→)：</strong> 控制战机上下左右移动</p>
                 <p><strong>Space键 (空格)：</strong> 持续射击</p>
                 <p><strong>Shift键：</strong> 开启保护罩</p>
-                <p><strong>Space + X键：</strong> 释放大招</p>
+                <p><strong>Space + A键：</strong> 释放大招</p>
             </div>
-            <p class="tutorial-tip">小贴士：释放大招时，请务必先按住空格键，再按下 X 键。请保持英文输入法状态以防冲突！</p>
+            <p class="tutorial-tip">小贴士：释放大招时，请务必先按住空格键，再按下 A 键。请保持英文输入法状态以防冲突！</p>
             <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
         </div>
     </div>
@@ -158,7 +158,15 @@
                 </div>
             </div>
         </div>
-        <div id="ult-container" class="hidden os2-panel"><div id="ult-fill"></div><span id="ult-text">0%</span></div>
+        
+        <div id="ult-wrapper" class="hidden">
+            <div id="ult-charges">0</div>
+            <div id="ult-container">
+                <div id="ult-fill"></div>
+                <span id="ult-text">0%</span>
+            </div>
+        </div>
+
     </div>
     <script type="module" src="js/game.js"></script>
 </body>
