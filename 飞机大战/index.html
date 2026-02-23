@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>飞机大战 - OS2 指尖长空 v4.5.2</title>
+    <title>飞机大战 - OS2 指尖长空 v4.8</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
@@ -52,6 +53,7 @@
             <div class="mode-card" data-mode="gesture" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
                 <div class="mode-text-heavy">手势控制</div>
                 <div class="mode-text-light">沉浸式视觉交互</div>
+                <div class="mode-text-light" style="color: #ffaa00; font-weight: bold; margin-top: 5px;">(Beta 测试版)</div>
             </div>
         </div>
         <button id="back-from-mode-btn" class="btn secondary" style="width: 200px; padding: 10px;">返回主菜单</button>
@@ -61,7 +63,7 @@
 
     <div id="modal-gesture" class="modal hidden">
         <div class="modal-content">
-            <h2 style="color: #00d4ff; margin-bottom: 15px;">👋 手势作战指南 (Beta)</h2>
+            <h2 style="color: #00d4ff; margin-bottom: 15px;">👋 手势作战指南</h2>
             <div class="tutorial-text">
                 <p>👉 <strong>自动射击：</strong> 保持【手枪】姿势，系统将锁定开火。</p>
                 <p>✊ <strong>保护罩：</strong> 握紧【拳头】，展开高能偏导护盾。</p>
@@ -74,14 +76,14 @@
 
     <div id="modal-keyboard" class="modal hidden">
         <div class="modal-content">
-            <h2 style="color: #00FF44; margin-bottom: 15px;">⌨️ 键盘先锋指南</h2>
+            <h2 style="color: #00FF44; margin-bottom: 15px;">⌨️ 键盘先锋指南 (已更新)</h2>
             <div class="tutorial-section">
                 <p><strong>方向键 (↑↓←→)：</strong> 控制战机上下左右移动</p>
                 <p><strong>Space键 (空格)：</strong> 持续射击</p>
-                <p><strong>Shift键：</strong> 开启保护罩</p>
-                <p><strong>Space + A键：</strong> 释放大招</p>
+                <p><strong>G 键：</strong> 开启保护罩 (Guard)</p>
+                <p><strong>F 键：</strong> 释放大招 (Fire)</p>
             </div>
-            <p class="tutorial-tip">小贴士：释放大招时，请务必先按住空格键，再按下 A 键。请保持英文输入法状态以防冲突！</p>
+            <p class="tutorial-tip">小贴士：大招现在只需单独按下 F 键即可释放，无需组合键！</p>
             <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
         </div>
     </div>

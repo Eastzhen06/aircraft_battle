@@ -60,11 +60,10 @@ export default class Player {
         if (!isUltActive) {
             switch (input.gesture) {
                 case 'GUN': shouldShoot = this.shoot(); break;
-                case 'FIST': this.activateShield(); shouldShoot = this.shoot(); break;
+                case 'FIST': this.activateShield(); break; // 【v4.6修改】：S键仅开启护盾，不射击
                 case 'RECOIL':
                     if (skillSystem && skillSystem.isReady()) skillSystem.trigger();
-                    else shouldShoot = this.shoot();
-                    break;
+                    break; // 【v4.6修改】：A键仅触发大招，不射击
             }
         }
         
@@ -93,22 +92,22 @@ export default class Player {
         }
     }
 
-    // 【v4.5.2 新增】：响应光波扫射的快速破甲接口
+    // 【v4.6 修改部分】：响应光波扫射的瞬间破甲接口，并强制无敌
     reduceShield(amount) {
         if (this.isShieldActive) {
             this.shieldTimer -= amount;
+            // 如果传入极大的值瞬间破盾，强制赋予无敌帧
             if (this.shieldTimer <= 0) {
                 this.isShieldActive = false;
-                // 护盾爆裂后给予极短暂的无敌，防止下一帧直接被秒杀
-                this.isBlinking = true;
-                this.blinkTimer = 0.5;
+                this.triggerBlink(); 
+                console.log("🛡️ 护盾瞬间碎裂！触发无敌帧保护！");
             }
         }
     }
     
     triggerBlink() {
         this.isBlinking = true;
-        this.blinkTimer = 3.0; 
+        this.blinkTimer = 2.0; // 无敌时间 2 秒
     }
 
     heal(amount) { this.hp = Math.min(this.maxHp, this.hp + amount); }

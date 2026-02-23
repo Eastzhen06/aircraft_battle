@@ -8,69 +8,98 @@ import LevelSystem from './systems/level.js';
 import ObjectPool from './utils/objectPool.js';
 import Wingman from './entities/wingman.js';
 
-// ==========================================
-// 【v4.5 修改部分】：代码音频合成器基建 (AudioController)
-// ==========================================
 class AudioController {
     constructor() {
         this.sfxEnabled = true;
         this.bgmEnabled = true;
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.bgmBuffer = null;
+        this.bgmSource = null;
         
-        // 背景音乐加载
-        this.bgm = new Audio('./audio/bgm_space.mp3');
-        this.bgm.loop = true;
-        this.bgm.volume = 0.5;
-        this.audioCtx = null;
+        this.bgmGainNode = this.audioCtx.createGain();
+        this.bgmGainNode.gain.value = 0.5;
+        this.bgmGainNode.connect(this.audioCtx.destination);
+        
+        this.loadBGM('./audio/bgm_space.mp3');
+    }
+
+    async loadBGM(url) {
+        try {
+            console.log("正在将背景音乐装载入内存 (AudioBuffer)...");
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            this.bgmBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+            console.log("背景音乐硬解码完成！随时待命。");
+            
+            if (this.audioCtx.state === 'running' && this.bgmEnabled && !this.bgmSource) {
+                this.playBGM();
+            }
+        } catch (e) {
+            console.error("❌ BGM 解码毁灭性失败！请确认该文件是标准 MP3/WAV 格式，或用格式工厂重新转换一次！", e);
+        }
     }
 
     initCtx() {
-        if (!this.audioCtx) {
-            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
         }
-        if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
-        if (this.bgmEnabled) this.bgm.play().catch(e => console.log('BGM Autoplay blocked.', e));
+        if (this.bgmEnabled) {
+            this.playBGM();
+        }
+    }
+
+    playBGM() {
+        if (!this.bgmBuffer || this.bgmSource || !this.bgmEnabled) return;
+        this.bgmSource = this.audioCtx.createBufferSource();
+        this.bgmSource.buffer = this.bgmBuffer;
+        this.bgmSource.loop = true; 
+        this.bgmSource.connect(this.bgmGainNode);
+        this.bgmSource.start(0);
     }
 
     setBGM(enabled) {
         this.bgmEnabled = enabled;
-        if (enabled && this.audioCtx) this.bgm.play().catch(e=>e);
-        else this.bgm.pause();
+        if (enabled) {
+            this.playBGM();
+        } else {
+            if (this.bgmSource) {
+                this.bgmSource.stop();
+                this.bgmSource.disconnect();
+                this.bgmSource = null;
+            }
+        }
     }
 
     setSFX(enabled) {
         this.sfxEnabled = enabled;
     }
 
-    // 纯代码模拟科幻连发等离子音效，短促、复古且完全无损高频并发
     playShootSound() {
         if (!this.sfxEnabled || !this.audioCtx) return;
         const t = this.audioCtx.currentTime;
         const osc = this.audioCtx.createOscillator();
         const gain = this.audioCtx.createGain();
 
-        // 使用三角波（Triangle）产生比方波更柔和、清脆的质感
-        osc.type = 'triangle'; 
-        // 频率指数滑降，形成经典 "啾" 声
-        osc.frequency.setValueAtTime(800, t);
-        osc.frequency.exponentialRampToValueAtTime(150, t + 0.1);
+        osc.type = 'square'; 
+        osc.frequency.setValueAtTime(1200, t); 
+        osc.frequency.exponentialRampToValueAtTime(100, t + 0.08); 
 
-        // 音量急剧衰减，防止爆音
-        gain.gain.setValueAtTime(0.15, t); 
-        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+        gain.gain.setValueAtTime(0.1, t); 
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
 
         osc.connect(gain);
         gain.connect(this.audioCtx.destination);
         osc.start(t);
-        osc.stop(t + 0.1);
+        osc.stop(t + 0.08);
     }
 }
 
 // ==========================================
-// 【v4.5.2 修改部分】：多端解耦与鼠标逻辑强化
+// 【v4.8 核心修改】：物理隔离锁死，严禁模式逃逸与串联
 // ==========================================
 class UnifiedInputSystem {
     constructor() {
-        this.mode = 'gesture'; 
+        this.mode = null; // 初始不赋予任何模式，等待锁定
         this.x = window.innerWidth / 2;
         this.y = window.innerHeight * 0.8;
         this.keys = {};
@@ -79,24 +108,27 @@ class UnifiedInputSystem {
         this.clickTimer = null;
         this.activeTempGesture = null;
 
-        window.addEventListener('keydown', e => this.keys[e.code] = true);
-        window.addEventListener('keyup', e => this.keys[e.code] = false);
-
-        const canvas = document.getElementById('gameCanvas');
+        this.handleKeyDown = (e) => {
+            // 【事件刺客 2.0】：拦截 F/G/空格/方向键，彻底物理销毁信号
+            if (['KeyF', 'KeyG', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                e.stopImmediatePropagation(); 
+                e.preventDefault(); 
+            }
+            this.keys[e.code] = true;
+        };
         
-        // 统一处理触控与鼠标的光标移动
-        const handleMove = (e) => {
+        this.handleKeyUp = (e) => {
+            this.keys[e.code] = false;
+        };
+        
+        this.handleMove = (e) => {
             if (this.mode === 'touch') {
                 this.x = e.clientX || (e.touches && e.touches[0].clientX); 
                 this.y = e.clientY || (e.touches && e.touches[0].clientY);
-                // 废弃原有的 150ms 超时断火机制，彻底解决无故不发射子弹的 Bug
             }
         };
-        canvas.addEventListener('mousemove', handleMove);
-        canvas.addEventListener('touchmove', handleMove);
 
-        // 统一处理多击事件 (Double & Triple clicks)
-        const handleDown = (e) => {
+        this.handleDown = (e) => {
             if (this.mode === 'touch') {
                 this.clickCount++;
                 if (this.clickTimer) clearTimeout(this.clickTimer);
@@ -107,9 +139,54 @@ class UnifiedInputSystem {
                 }, 300);
             }
         };
-        canvas.addEventListener('mousedown', handleDown);
-        canvas.addEventListener('touchstart', handleDown, { passive: false });
     }
+
+    // 【新增绝对隔离接口】：在 UI 选定模式时调用，斩断其他干扰
+    lockMode(selectedMode) {
+        this.mode = selectedMode;
+        const canvas = document.getElementById('gameCanvas');
+
+        // 【v4.8.1 核心补丁】：如果不是手势模式，强制剥夺手势引擎的所有权限
+        if (selectedMode !== 'gesture' && this.gestureEngine) {
+            // 1. 尝试调用手势引擎的清理接口（如果存在）
+            if (typeof this.gestureEngine.stop === 'function') this.gestureEngine.stop();
+            console.log("🚫 手势引擎已被物理剥离，禁止一切非法监听。");
+        }
+
+        // 1. 先进行极其暴力的“物理清除”，拆除所有已有监听器
+        window.removeEventListener('keydown', this.handleKeyDown);
+        window.removeEventListener('keyup', this.handleKeyUp);
+        canvas.removeEventListener('mousemove', this.handleMove);
+        canvas.removeEventListener('touchmove', this.handleMove);
+        canvas.removeEventListener('mousedown', this.handleDown);
+        canvas.removeEventListener('touchstart', this.handleDown);
+        
+        // 2. 只有选定该模式，才接通它的物理通道
+        if (this.mode === 'keyboard') {
+            // 【捕获防线】：传入 true 开启捕获阶段
+            window.addEventListener('keydown', this.handleKeyDown, true);
+            window.addEventListener('keyup', this.handleKeyUp, true);
+            
+            // 【正确修改】：在这里强制手势引擎 UI 停止刷新幽灵数字，并显示正确的 F/G
+            const debugDisplay = document.getElementById('gesture-display');
+            if (debugDisplay) debugDisplay.textContent = "动作: 物理锁定 (F/G 已拦截)";
+            
+            console.log("🔒 已物理锁定：[键盘模式]。最高级捕获防线已开启。");
+        }
+        else if (this.mode === 'touch') {
+            canvas.addEventListener('mousemove', this.handleMove);
+            canvas.addEventListener('touchmove', this.handleMove);
+            canvas.addEventListener('mousedown', this.handleDown);
+            canvas.addEventListener('touchstart', this.handleDown, { passive: false });
+            console.log("🔒 已物理锁定：[触控模式]。键盘与视觉系统已被强行切断。");
+        }
+        else if (this.mode === 'gesture') {
+            console.log("🔒 已物理锁定：[手势模式]。系统等待分配摄像头资源。");
+        }
+    }
+    
+
+
 
     triggerTempGesture(g) {
         this.activeTempGesture = g;
@@ -118,6 +195,7 @@ class UnifiedInputSystem {
 
     getInput(gestureEngine) {
         if (this.mode === 'gesture') {
+            // 手势模式下，唯一的数据来源是摄像头引擎
             return gestureEngine.getInputState(); 
         } 
         else if (this.mode === 'keyboard') {
@@ -127,20 +205,20 @@ class UnifiedInputSystem {
             if (this.keys['ArrowUp']) this.y -= 12;
             if (this.keys['ArrowDown']) this.y += 12;
 
-            // 【v4.5.2 修改部分】：解绑 Space + X，重绑 Space + A
-            if (this.keys['Space'] && this.keys['KeyA']) gesture = 'RECOIL';
-            else if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) gesture = 'FIST';
+            if (this.keys['KeyF']) gesture = 'RECOIL';
+            else if (this.keys['KeyG']) gesture = 'FIST';
             else if (this.keys['Space']) gesture = 'GUN';
+            
             return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
         } 
         else if (this.mode === 'touch') {
-            // 【v4.5.2 修改部分】：鼠标与触控模式默认常驻射击状态，保证火力不断
             let gesture = 'GUN'; 
-            if (this.activeTempGesture) {
-                gesture = this.activeTempGesture;
-            }
+            if (this.activeTempGesture) gesture = this.activeTempGesture;
             return { isDetected: true, x: this.x, y: this.y, gesture: gesture };
         }
+        
+        // 默认防崩溃保护
+        return { isDetected: false, x: this.x, y: this.y, gesture: 'IDLE' };
     }
 }
 
@@ -271,10 +349,16 @@ class Game {
         this.frameTime = 0; 
         this.shakeTimer = 0;
 
+        this.isBossShooting = false; 
+        this.ultDamageApplied = false; // 【新增】：大招真伤单次触发锁
+
         this.imageLoader = new ImageLoader(); 
         this.gestureEngine = new GestureEngine();
         this.unifiedInput = new UnifiedInputSystem(); 
-        this.audioController = new AudioController(); 
+        
+        if (!window.globalAudio) window.globalAudio = new AudioController();
+        this.audioController = window.globalAudio;
+
         this.skillSystem = new SkillSystem();
         this.levelSystem = new LevelSystem();
 
@@ -359,12 +443,15 @@ class Game {
         const modeCards = document.querySelectorAll('#mode-select-screen .mode-card');
         modeCards.forEach(card => {
             card.addEventListener('click', (e) => {
-                this.unifiedInput.mode = card.dataset.mode;
+                const selectedMode = card.dataset.mode;
+                // 【v4.8 核心修改】：玩家点击卡片时，立刻执行物理模式隔离锁！
+                this.unifiedInput.lockMode(selectedMode);
+                
                 document.getElementById('mode-select-screen').classList.add('hidden');
                 
                 document.getElementById('modal-overlay').classList.remove('hidden');
-                if (this.unifiedInput.mode === 'gesture') document.getElementById('modal-gesture').classList.remove('hidden');
-                else if (this.unifiedInput.mode === 'keyboard') document.getElementById('modal-keyboard').classList.remove('hidden');
+                if (selectedMode === 'gesture') document.getElementById('modal-gesture').classList.remove('hidden');
+                else if (selectedMode === 'keyboard') document.getElementById('modal-keyboard').classList.remove('hidden');
                 else document.getElementById('modal-touch').classList.remove('hidden');
             });
         });
@@ -396,9 +483,11 @@ class Game {
 
         document.getElementById('toggle-sfx').addEventListener('change', (e) => {
             this.audioController.setSFX(e.target.checked);
+            e.target.blur(); 
         });
         document.getElementById('toggle-bgm').addEventListener('change', (e) => {
             this.audioController.setBGM(e.target.checked);
+            e.target.blur(); 
         });
 
         this.pauseBtn.addEventListener('click', () => this.togglePause());
@@ -481,7 +570,8 @@ class Game {
             document.body.appendChild(video);
             this.gestureEngine.init(video, document.getElementById('debugCanvas'), this.canvas);
         } else {
-            document.getElementById('gesture-display').textContent = `动作: ${this.unifiedInput.mode} 接入`;
+            // 【v4.8 修改】：如果在非手势模式下，强制切断手势引擎的一切可能调用，确保摄像头处于死亡状态
+            document.getElementById('gesture-display').textContent = `动作: 键盘/物理 锁定`;
             this.unifiedInput.x = this.canvas.width / 2;
             this.unifiedInput.y = this.canvas.height * 0.8;
         }
@@ -499,7 +589,6 @@ class Game {
         this.enemies = [];
         this.powerups = [];
         if (this.wingman) {
-            this.wingman.defensiveUses = 3;
             this.wingman.isForcefieldActive = false;
         }
         this.boss = null;
@@ -562,10 +651,14 @@ class Game {
     }
 
     spawnEnemyBullet(x, y, speed, damage, angle = 0, isLaser = false) {
+        let finalSpeed = speed;
+        if (this.isBossShooting) finalSpeed *= 2.5;
+        else finalSpeed *= 2.0;
+
         const b = this.enemyBulletPool.get();
         b.x = x; 
         b.y = y; 
-        b.speed = -speed; 
+        b.speed = -finalSpeed; 
         b.damage = damage; 
         b.type = 'enemy'; 
         b.angleOffset = angle; 
@@ -703,24 +796,44 @@ class Game {
             }
         });
 
-        // 【v4.5.2 核心】：Boss 激光光波与玩家战机的持续帧级碰撞判定
+        this.enemies.forEach(e => {
+            if (e.active && e.type === 3 && e.isRedLaserActive) {
+                const rect = e.getRedLaserRect(this.canvas.height);
+                if (rect && 
+                    this.player.x + this.player.width/2 > rect.x && 
+                    this.player.x - this.player.width/2 < rect.x + rect.w &&
+                    this.player.y + this.player.height/2 > rect.y && 
+                    this.player.y - this.player.height/2 < rect.y + rect.h) {
+                    
+                    if (!this.player.isShieldActive && !this.player.isInvincible) {
+                        let damageReduction = 1.0;
+                        if (this.wingman && this.wingman.requestDefense('E3_LASER')) {
+                            damageReduction = 0.5;
+                        }
+                        this.handlePlayerDamage((this.player.maxHp * 0.3) * damageReduction * this.deltaTime);
+                    }
+                }
+            }
+        });
+
         if (this.boss && this.boss.isLaserSweeping) {
             const laserRects = this.boss.getLaserRects(this.canvas.height);
             for (let rect of laserRects) {
-                // 如果玩家进入紫色光波范围内
                 if (this.player.x + this.player.width/2 > rect.x && 
                     this.player.x - this.player.width/2 < rect.x + rect.w &&
                     this.player.y + this.player.height/2 > rect.y && 
                     this.player.y - this.player.height/2 < rect.y + rect.h) {
                     
                     if (this.player.isShieldActive) {
-                        // 护盾被快速攻破 (以 5 倍速缩减护盾存活时间)
-                        if (this.player.reduceShield) this.player.reduceShield(this.deltaTime * 5); 
+                        this.player.reduceShield(999); 
                     } else if (!this.player.isInvincible) {
-                        // 防御罩破裂后，进行每秒 150 点的高速致命扣血
-                        this.handlePlayerDamage(150 * this.deltaTime); 
+                        let damageReduction = 1.0;
+                        if (this.wingman && this.wingman.requestDefense('BOSS_LASER')) {
+                            damageReduction = 0.5;
+                        }
+                        this.handlePlayerDamage((this.player.maxHp * 0.5) * damageReduction * this.deltaTime); 
                     }
-                    break; // 防止两条光波交叉时受到双倍扣血惩罚
+                    break;
                 }
             }
         }
@@ -773,12 +886,10 @@ class Game {
         if (this.boss) {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
             
-            // 【v4.5.2 核心】：当 Boss 被击败时，记录 Checkpoint
             if (!this.boss.active && this.boss.health <= 0) {
                 this.checkpointScore = this.score;
             }
 
-            if (this.boss.shouldShoot()) this.boss.shoot(this);
             this.bullets.forEach(b => {
                 if (b.active && b.state === 'FLYING') {
                     let collision = false;
@@ -799,13 +910,19 @@ class Game {
             });
         }
         
-        if (this.skillSystem.state === 'ACTIVE' && this.skillSystem.activeTimer === this.skillSystem.ultDuration) {
-            this.enemies.forEach(e => { e.active = false; this.score += e.scoreValue; });
-            this.enemyBullets.forEach(b => b.active = false);
-            if (this.boss) {
-                const bossKilled = this.boss.takeDamage(this.boss.maxHealth * 0.15); 
-                if (bossKilled) this.score += this.boss.scoreValue;
+        // 【浮点数陷阱修复】：使用状态锁替代 === 判断，确保 100% 触发单次核算
+        if (this.skillSystem.state === 'ACTIVE') {
+            if (!this.ultDamageApplied) {
+                this.enemies.forEach(e => { e.active = false; this.score += e.scoreValue; });
+                this.enemyBullets.forEach(b => b.active = false);
+                if (this.boss) {
+                    const bossKilled = this.boss.takeDamage(this.boss.maxHealth * 0.30); 
+                    if (bossKilled) this.score += this.boss.scoreValue;
+                }
+                this.ultDamageApplied = true; // 锁死，防止每帧扣血
             }
+        } else {
+            this.ultDamageApplied = false; // 大招结束后解锁
         }
 
         if(this.shieldCountUI) this.shieldCountUI.textContent = `🛡️ x ${this.player.shieldCount}`;

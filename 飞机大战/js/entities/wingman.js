@@ -1,123 +1,107 @@
-const LERP_FACTOR = 0.15; 
+// 【v4.8 修改】：严格修正资源键名为原版 w_xxx 系列，并清除和平僚机的射击参数
+const WINGMAN_TYPES = {
+    'none': { shootInterval: 0, bulletSpeed: 0, bulletDamage: 0, asset: null },
+    'defensive': { 
+        shootInterval: 0, bulletSpeed: 0, bulletDamage: 0, asset: 'w_defensive', // 修复图片键名与射速
+        isDefensive: true, maxUses: 3,
+        shields: { normal: 1, e3: 2, boss: 1 }
+    },
+    'offensive': { shootInterval: 0.2, bulletSpeed: 800, bulletDamage: 15, asset: 'w_offensive' }, // 修复图片键名
+    'magnetic': { shootInterval: 0, bulletSpeed: 0, bulletDamage: 0, asset: 'w_magnetic', isMagnetic: true } // 修复图片键名与射速
+};
 
 export default class Wingman {
-    constructor(type, imageLoader, interactiveWidth) {
-        this.type = type; 
-        this.active = type !== 'none';
+    constructor(type = 'none', imageLoader, interactiveWidth = window.innerWidth) {
+        this.type = type;
+        this.config = WINGMAN_TYPES[type];
+        this.image = imageLoader.get(this.config.asset);
         
-        // 【v4.4 修改部分】：增大了 7% 的尺寸比例 (0.05 * 1.07 ≈ 0.0535)
-        this.width = interactiveWidth * 0.0535; 
-        this.height = this.width;
-
-        this.image = null;
-        if (type === 'defensive') this.image = imageLoader.get('w_defensive');
-        else if (type === 'offensive') this.image = imageLoader.get('w_offensive');
-        else if (type === 'magnetic') this.image = imageLoader.get('w_magnetic');
-
-        if (this.image && this.image.width > 0) {
-            this.height = this.width * (this.image.height / this.image.width);
-        }
+        this.width = interactiveWidth * 0.05; 
+        if (this.image && this.image.width > 0) this.height = this.width * (this.image.height / this.image.width);
+        else this.height = this.width;
 
         this.left = { x: 0, y: 0 };
         this.right = { x: 0, y: 0 };
-        this.magnetTimer = 0;
-
-        // 【v4.4 修改部分】：防御型独立能量管理与状态
-        this.defensiveUses = 3; 
+        this.shootCooldown = 0;
+        
         this.isForcefieldActive = false;
         this.forcefieldTimer = 0;
+        this.forcefieldDuration = 5;
     }
 
     update(player, deltaTime, game) {
-        if (!this.active) return;
+        if (this.type === 'none') return;
 
-        const targetLeftX = player.x - player.width * 0.8;
-        const targetRightX = player.x + player.width * 0.8;
-        const targetY = player.y + 15;
+        const offsetX = player.width * 0.8;
+        const offsetY = 20;
+        this.left.x = player.x - offsetX; this.left.y = player.y + offsetY;
+        this.right.x = player.x + offsetX; this.right.y = player.y + offsetY;
 
-        this.left.x += (targetLeftX - this.left.x) * LERP_FACTOR;
-        this.left.y += (targetY - this.left.y) * LERP_FACTOR;
-        this.right.x += (targetRightX - this.right.x) * LERP_FACTOR;
-        this.right.y += (targetY - this.right.y) * LERP_FACTOR;
-
-        if (this.type === 'magnetic') {
-            this.magnetTimer += deltaTime;
-            if (this.magnetTimer >= 2.0) {
-                this.magnetTimer = 0;
-                game.powerups.forEach(p => { if (p.active) p.isMagnetized = true; });
+        if (this.shootCooldown > 0) this.shootCooldown -= deltaTime;
+        
+        if (this.config.isDefensive && this.isForcefieldActive) {
+            this.forcefieldTimer -= deltaTime;
+            if (this.forcefieldTimer <= 0) {
+                this.isForcefieldActive = false;
+                console.log("僚机智能护盾离线。");
             }
         }
-
-        // 【v4.4 修改部分】：防御阵列自治触发 AI
-        if (this.type === 'defensive') {
-            if (this.isForcefieldActive) {
-                this.forcefieldTimer -= deltaTime;
-                if (this.forcefieldTimer <= 0) this.isForcefieldActive = false;
-            } else if (this.defensiveUses > 0 && !player.isShieldActive) {
-                // 自治 AI：若 Boss 存在且本局还没用过护盾，强制兜底激活
-                let shouldTrigger = false;
-                if (game.boss && game.boss.active && this.defensiveUses === 3) {
-                    shouldTrigger = true;
-                }
-                
-                // 战况检测：子弹过于密集逼近
-                if (!shouldTrigger) {
-                    const dangerZone = 120;
-                    for (let b of game.enemyBullets) {
-                        if (b.active && Math.hypot(b.x - player.x, b.y - player.y) < dangerZone) {
-                            shouldTrigger = true; break;
-                        }
-                    }
-                }
-
-                if (shouldTrigger) {
-                    this.isForcefieldActive = true;
-                    this.forcefieldTimer = 4.0; // 开启 4 秒联合力场
-                    this.defensiveUses--;
-                    console.log(`[Wingman AI] 侦测到高危打击，矩阵力场展开！剩余能量：${this.defensiveUses}`);
-                }
-            }
+        
+        if (this.config.isMagnetic && game.powerups) {
+            game.powerups.forEach(p => {
+                if (p.active && Math.abs(p.y - player.y) < 300) p.isMagnetized = true;
+            });
         }
     }
 
     shoot(game) {
-        if (!this.active || this.type !== 'offensive') return;
-        game.spawnBullet(this.left.x, this.left.y - this.height/2, 600, 5, 'straight');
-        game.spawnBullet(this.right.x, this.right.y - this.height/2, 600, 5, 'straight');
+        // 【v4.8 修改】：加装绝对拦截墙，彻底禁止非攻击型僚机开火
+        if (this.type !== 'offensive' || this.shootCooldown > 0) return;
+        
+        this.shootCooldown = this.config.shootInterval;
+        game.spawnBullet(this.left.x, this.left.y, this.config.bulletSpeed, this.config.bulletDamage, 'straight');
+        game.spawnBullet(this.right.x, this.right.y, this.config.bulletSpeed, this.config.bulletDamage, 'straight');
+    }
+
+    requestDefense(threatType) {
+        if (!this.config.isDefensive || this.isForcefieldActive) return false;
+
+        let threatKey = 'normal';
+        if (threatType === 'E3_LASER') threatKey = 'e3';
+        if (threatType === 'BOSS_LASER') threatKey = 'boss';
+
+        if (this.config.shields[threatKey] > 0) {
+            this.config.shields[threatKey]--;
+            this.isForcefieldActive = true;
+            this.forcefieldTimer = this.forcefieldDuration;
+            console.log(`⚠️ 僚机响应威胁 [${threatKey}]! 激活智能立场。剩余配额: ${this.config.shields[threatKey]}`);
+            return true; 
+        }
+        return false;
     }
 
     draw(ctx, player) {
-        if (!this.active) return;
+        if (this.type === 'none') return;
+        
         if (this.image) {
             ctx.drawImage(this.image, this.left.x - this.width/2, this.left.y - this.height/2, this.width, this.height);
             ctx.drawImage(this.image, this.right.x - this.width/2, this.right.y - this.height/2, this.width, this.height);
         }
 
-        // 【v4.4 修改部分】：智能联合阵列视觉呈现
-        if (this.type === 'defensive' && this.isForcefieldActive && player) {
-            ctx.strokeStyle = 'rgba(0, 255, 100, 0.8)';
-            ctx.fillStyle = 'rgba(0, 255, 100, 0.15)';
-            ctx.lineWidth = 4;
+        if (this.config.isDefensive && this.isForcefieldActive) {
+            const fieldWidth = (this.right.x - this.left.x) + this.width * 2;
+            const fieldHeight = player.height + 40;
+            const x = this.left.x - this.width;
+            const y = player.y - player.height;
             
-            // 包裹两架僚机与主机的超大矩形/椭圆框
-            const fw = (this.right.x - this.left.x) + this.width * 2;
-            const fx = this.left.x - this.width;
-            const fh = (this.left.y - player.y) + player.height + 40;
-            const fy = player.y - player.height;
-
+            const alpha = 0.3 + Math.sin(Date.now() / 150) * 0.2;
+            ctx.fillStyle = `rgba(255, 50, 50, ${alpha})`; 
+            ctx.strokeStyle = `rgba(255, 100, 100, 0.8)`;
+            ctx.lineWidth = 3;
             ctx.beginPath();
-            ctx.roundRect(fx, fy, fw, fh, 25); 
+            ctx.roundRect(x, y, fieldWidth, fieldHeight, 15);
             ctx.fill();
             ctx.stroke();
-            
-            // 发光扫描线特效
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.strokeStyle = `rgba(0, 255, 100, ${0.5 + Math.sin(Date.now()/50)*0.5})`;
-            ctx.beginPath();
-            ctx.moveTo(fx, fy + fh/2); ctx.lineTo(fx + fw, fy + fh/2);
-            ctx.stroke();
-            ctx.restore();
         }
     }
 }

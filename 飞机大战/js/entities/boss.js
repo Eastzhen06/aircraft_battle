@@ -7,7 +7,8 @@ export default class Boss {
         this.imageKey = 'b' + this.bossIndex;
         
         const interactiveWidth = playArea.maxX - playArea.minX;
-        this.width = interactiveWidth * 0.85;
+        // 【v4.6 修改】：尺寸从 85% 坍缩至 70%
+        this.width = interactiveWidth * 0.70;
         this.height = this.width * (140 / 180); 
         this.scoreValue = 5000 * level; 
         
@@ -33,6 +34,13 @@ export default class Boss {
         
         this.maxHealth = 2800 * Math.pow(1.2, powerLevel) * baseMultiplier;
         this.health = this.maxHealth;
+
+        // 【v4.6 修改】：Boss 多命制引入
+        this.lives = level <= 4 ? 2 : 3; 
+        this.maxLives = this.lives;
+        this.isBlinking = false;
+        this.blinkTimer = 0;
+
         this.x = (playArea.maxX - playArea.minX) / 2 + playArea.minX;
         this.y = -this.height; 
         this.phase = 1;
@@ -41,7 +49,7 @@ export default class Boss {
         this.targetX = this.x;
         this.entering = true;
         
-        // 【v4.5.2 新增】：激光射线阵列状态机
+        // 激光射线阵列状态机
         this.laserFireCount = 0;
         this.isLaserSweeping = false;
         this.laserStateTimer = 0; 
@@ -52,6 +60,11 @@ export default class Boss {
     
     update(deltaTime, canvasWidth, canvasHeight, player, playArea) {
         if (!this.active) return;
+
+        if (this.isBlinking) {
+            this.blinkTimer -= deltaTime;
+            if (this.blinkTimer <= 0) this.isBlinking = false;
+        }
         
         if (this.entering) {
             this.y += 100 * deltaTime;
@@ -60,7 +73,7 @@ export default class Boss {
                 this.entering = false;
             }
         } else {
-            // 【v4.5.2 核心】：激光释放循环 (普通子弹与激光交替)
+            // 激光释放循环 (普通子弹与激光交替)
             if (this.laserFireCount < 5) {
                 this.laserStateTimer += deltaTime;
                 if (!this.isLaserSweeping && this.laserStateTimer > 8.0) { // 每 8 秒触发一次激光
@@ -190,12 +203,22 @@ export default class Boss {
         }
     }
     
+    // 【v4.6 修改】：Boss 多命制伤害拦截
     takeDamage(damage) {
-        if (this.entering) return false; 
+        if (this.entering || this.isBlinking) return false; 
         this.health -= damage;
         if (this.health <= 0) {
-            this.active = false;
-            return true;
+            this.lives--;
+            if (this.lives > 0) {
+                // 还有命，重置血量并无敌
+                this.health = this.maxHealth;
+                this.isBlinking = true;
+                this.blinkTimer = 1.5;
+                console.log(`Boss Phase Broken! Lives left: ${this.lives}`);
+            } else {
+                this.active = false;
+                return true;
+            }
         }
         return false;
     }
@@ -203,6 +226,8 @@ export default class Boss {
     draw(ctx) {
         if (!this.active) return;
         
+        if (this.isBlinking && Math.floor(Date.now() / 100) % 2 === 0) return;
+
         // 渲染连续性紫色光波
         if (this.isLaserSweeping) {
             const canvasHeight = ctx.canvas.height;
@@ -214,7 +239,6 @@ export default class Boss {
             ctx.shadowBlur = 20;
             for (let rect of rects) {
                 ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-                // 光波高亮核心
                 ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
                 ctx.fillRect(rect.x + rect.w/2 - 5, rect.y, 10, rect.h);
                 ctx.fillStyle = `rgba(180, 0, 255, ${alpha})`; 
@@ -231,9 +255,21 @@ export default class Boss {
         const canvasWidth = ctx.canvas.width;
         const screenX = canvasWidth / 2 - barWidth / 2; const screenY = 20;
 
+        // 【v4.6 修改】：血条左侧绘制命数小圆圈
+        const livesCircleX = screenX - 30;
+        const livesCircleY = screenY + barHeight / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(livesCircleX, livesCircleY, 15, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff0055'; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(this.lives, livesCircleX, livesCircleY);
+        ctx.restore();
+
+        // 绘制主血条
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(screenX, screenY, barWidth, barHeight);
         ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 2; ctx.strokeRect(screenX, screenY, barWidth, barHeight);
-        
         const healthColor = healthPercent > 0.5 ? '#44ff44' : healthPercent > 0.25 ? '#ffff44' : '#ff0055';
         ctx.fillStyle = healthColor; ctx.fillRect(screenX, screenY, barWidth * healthPercent, barHeight);
         
