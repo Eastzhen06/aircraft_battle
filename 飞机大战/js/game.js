@@ -375,12 +375,40 @@ class Game {
         this.powerups = [];
         this.boss = null;
         
-        this.currentPlaneType = 'Ranger';
-        this.currentWingmanType = 'none'; 
+        // 【Phase 9 新增：持久化数据读取】
+        try {
+            this.unlockedPlanes = JSON.parse(localStorage.getItem('os2_unlocked_planes')) || ['Ranger'];
+            this.unlockedWingmen = JSON.parse(localStorage.getItem('os2_unlocked_wingmen')) || ['none'];
+            this.maxClearedLevel = parseInt(localStorage.getItem('os2_max_cleared_level')) || 0;
+        } catch (e) {
+            this.unlockedPlanes = ['Ranger'];
+            this.unlockedWingmen = ['none'];
+            this.maxClearedLevel = 0;
+        }
+
+        // 默认选中已解锁数组的第一个
+        this.selectedPlane = this.unlockedPlanes[0];
+        this.selectedWingman = this.unlockedWingmen[0];
         
         this.playArea = { minX: 0, maxX: window.innerWidth };
         this.interactiveWidth = window.innerWidth;
     }
+
+    // 【Phase 9 新增：全局配置字典，键名已与 imageLoader 严格对齐】
+    AIRCRAFT_CONFIG = {
+        planes: {
+            'Ranger': { name: '普通战机', imageKey: 'Ranger', unlockLevel: 0 },
+            'Interceptor': { name: '拦截者', imageKey: 'Interceptor', unlockLevel: 5 },
+            'Fortress': { name: '重装堡垒', imageKey: 'Fortress', unlockLevel: 6 },
+            'VoidBomber': { name: '虚空轰炸机', imageKey: 'VoidBomber', unlockLevel: 8 }
+        },
+        wingmen: {
+            'none': { name: '无僚机', imageKey: null, unlockLevel: 0 },
+            'offensive': { name: '攻击型僚机', imageKey: 'w_offensive', unlockLevel: 1 },
+            'defensive': { name: '防御型僚机', imageKey: 'w_defensive', unlockLevel: 3 },
+            'magnetic': { name: '磁吸型僚机', imageKey: 'w_magnetic', unlockLevel: 9 }
+        }
+    };
 
     init() {
         window.imageLoader = this.imageLoader;
@@ -398,6 +426,48 @@ class Game {
         }
     }
 
+    // 【Phase 9 新增：机库动态渲染】
+    renderHangar() {
+        const planesContainer = document.getElementById('hangar-planes-container');
+        const wingmenContainer = document.getElementById('hangar-wingmen-container');
+        if (!planesContainer || !wingmenContainer) return;
+
+        planesContainer.innerHTML = ''; wingmenContainer.innerHTML = '';
+
+        const createCard = (type, key, config, container, isSelected) => {
+            const isUnlocked = type === 'plane' ? this.unlockedPlanes.includes(key) : this.unlockedWingmen.includes(key);
+            const card = document.createElement('div');
+            card.className = `hangar-item ${isUnlocked ? 'owned' : 'locked'} ${isSelected ? 'selected' : ''}`;
+            
+            // 渲染图片
+            const imgBox = document.createElement('div');
+            imgBox.className = 'item-img-box';
+            if (config.imageKey) {
+                const img = this.imageLoader.get(config.imageKey);
+                imgBox.appendChild(img ? img.cloneNode() : document.createTextNode('无影像'));
+            } else { imgBox.innerText = '无影像'; }
+            card.appendChild(imgBox);
+
+            // 渲染文字与状态
+            const name = document.createElement('div'); name.className = 'item-name'; name.innerText = config.name;
+            const status = document.createElement('div'); status.className = 'item-status';
+            status.innerText = isUnlocked ? (isSelected ? '已部署' : '点击选择') : `通关第${config.unlockLevel}关解锁`;
+            card.appendChild(name); card.appendChild(status);
+
+            // 互斥单选事件
+            if (isUnlocked) {
+                card.addEventListener('click', () => {
+                    if (type === 'plane') this.selectedPlane = key; else this.selectedWingman = key;
+                    this.renderHangar(); // 刷新高亮状态
+                });
+            }
+            container.appendChild(card);
+        };
+
+        for (const [key, config] of Object.entries(this.AIRCRAFT_CONFIG.planes)) createCard('plane', key, config, planesContainer, key === this.selectedPlane);
+        for (const [key, config] of Object.entries(this.AIRCRAFT_CONFIG.wingmen)) createCard('wingman', key, config, wingmenContainer, key === this.selectedWingman);
+    }
+
     populateLevelGrid() {
         const grid = document.getElementById('level-grid');
         if (!grid) return;
@@ -406,14 +476,19 @@ class Game {
         CAMPAIGN_LEVELS.forEach(lvl => {
             const box = document.createElement('div');
             box.className = 'level-box';
-            if (lvl.level === this.selectedLevel) box.classList.add('selected');
-            box.innerText = lvl.level;
             
-            box.addEventListener('click', () => {
-                document.querySelectorAll('.level-box').forEach(b => b.classList.remove('selected'));
-                box.classList.add('selected');
-                this.selectedLevel = lvl.level;
-            });
+            // 【Phase 9 修改：关卡锁定逻辑】必须通关前置关卡才能点击
+            if (lvl.level > this.maxClearedLevel + 1) {
+                box.classList.add('locked');
+            } else {
+                if (lvl.level === this.selectedLevel) box.classList.add('selected');
+                box.addEventListener('click', () => {
+                    document.querySelectorAll('.level-box').forEach(b => b.classList.remove('selected'));
+                    box.classList.add('selected');
+                    this.selectedLevel = lvl.level;
+                });
+            }
+            box.innerText = lvl.level;
             grid.appendChild(box);
         });
     }
@@ -430,14 +505,23 @@ class Game {
             this.debugToggleBtn.addEventListener('click', () => this.debugWrapper.classList.toggle('collapsed'));
         }
 
+        // 【手术一修改：将起步流程导向新机库】
         document.getElementById('start-btn').addEventListener('click', () => {
             this.startScreen.style.display = 'none';
+            document.getElementById('hangar-screen').classList.remove('hidden');
+            this.renderHangar(); // 渲染机库图片和状态
+        });
+
+        // 新增：从机库进入模式选择
+        document.getElementById('hangar-launch-btn')?.addEventListener('click', () => {
+            document.getElementById('hangar-screen').classList.add('hidden');
             document.getElementById('mode-select-screen').classList.remove('hidden');
         });
 
+        // 修改：从模式选择退回机库
         document.getElementById('back-from-mode-btn').addEventListener('click', () => {
             document.getElementById('mode-select-screen').classList.add('hidden');
-            this.startScreen.style.display = 'flex';
+            document.getElementById('hangar-screen').classList.remove('hidden');
         });
 
         const modeCards = document.querySelectorAll('#mode-select-screen .mode-card');
@@ -498,25 +582,16 @@ class Game {
         });
         document.getElementById('menu-btn-pause').addEventListener('click', () => location.reload());
 
-        const planeBtns = document.querySelectorAll('.plane-btn');
-        planeBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                planeBtns.forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentPlaneType = e.target.dataset.type;
-                this.planeNameUI.textContent = { 'Ranger': '普通战机', 'Interceptor': '拦截者', 'Fortress': '重装堡垒', 'VoidBomber': '虚空轰炸机' }[this.currentPlaneType] || this.currentPlaneType;
-            });
+        document.getElementById('btn-reconfigure')?.addEventListener('click', () => {
+            document.getElementById('victory-screen').classList.add('hidden');
+            this.gameContainer.style.display = 'none';
+            document.getElementById('hangar-screen').classList.remove('hidden');
+            this.renderHangar();
+            this.state = 'MENU';
         });
 
-        const wingmanBtns = document.querySelectorAll('.wingman-btn');
-        wingmanBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                wingmanBtns.forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentWingmanType = e.target.dataset.type;
-                const names = { 'none': '无僚机', 'defensive': '防御型僚机', 'offensive': '攻击型僚机', 'magnetic': '磁吸型僚机' };
-                document.getElementById('selected-wingman-name').textContent = names[this.currentWingmanType];
-            });
+        document.getElementById('btn-disconnect')?.addEventListener('click', () => {
+            location.reload(); // 玩家选择断开连接，直接刷新重载最干净
         });
     }
 
@@ -547,10 +622,11 @@ class Game {
         this.resize();
         this.state = 'PLAYING';
         this.score = 0; 
-        this.checkpointScore = 0; 
+        // this.checkpointScore 废弃不用
         
-        this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.currentPlaneType, this.interactiveWidth);
-        this.wingman = new Wingman(this.currentWingmanType, this.imageLoader, this.interactiveWidth);
+        // 【手术二修改：使用持久化变量创建战机】
+        this.player = new Player(this.canvas.width / 2, this.canvas.height * 0.85, this.imageLoader, this.selectedPlane, this.interactiveWidth);
+        this.wingman = new Wingman(this.selectedWingman, this.imageLoader, this.interactiveWidth);
         
         this.bullets = [];
         this.enemyBullets = [];
@@ -592,7 +668,7 @@ class Game {
             this.wingman.isForcefieldActive = false;
         }
         this.boss = null;
-        this.score = this.checkpointScore; 
+        this.score = 0; // 【手术二修改：死亡重开必须绝对清零，杜绝刷分】
         
         this.levelSystem.timer = 0;
         this.levelSystem.spawnTimer = 0;
@@ -615,7 +691,61 @@ class Game {
             this.gameLoop(performance.now());
         }
     }
+    // 【手术四新增：关卡胜利结算与奖励分发系统】
+    handleLevelVictory() {
+        this.state = 'VICTORY'; // 将游戏状态冻结，暂停一切渲染和物理运算
+        
+        // 1. 更新玩家历史最高通关记录
+        if (this.levelSystem.level > this.maxClearedLevel) {
+            this.maxClearedLevel = this.levelSystem.level;
+        }
 
+        // 2. 遍历武器库，核对解锁条件
+        let unlocksThisRound = [];
+        const checkUnlock = (type, key, config) => {
+            const list = type === 'plane' ? this.unlockedPlanes : this.unlockedWingmen;
+            // 满足解锁等级，且之前没有解锁过
+            if (this.levelSystem.level >= config.unlockLevel && !list.includes(key)) {
+                list.push(key);
+                unlocksThisRound.push(config.name); // 收集新解锁装备名称用于 UI 播报
+            }
+        };
+
+        // 基于我们在区块一定义的配置表进行全局扫描
+        for (const [key, config] of Object.entries(this.AIRCRAFT_CONFIG.planes)) checkUnlock('plane', key, config);
+        for (const [key, config] of Object.entries(this.AIRCRAFT_CONFIG.wingmen)) checkUnlock('wingman', key, config);
+
+        // 3. 将新资产写入硬盘持久化保存
+        try {
+            localStorage.setItem('os2_unlocked_planes', JSON.stringify(this.unlockedPlanes));
+            localStorage.setItem('os2_unlocked_wingmen', JSON.stringify(this.unlockedWingmen));
+            localStorage.setItem('os2_max_cleared_level', this.maxClearedLevel.toString());
+        } catch (e) {
+            console.warn("系统提示：存档写入失败，可能是处于无痕模式。", e);
+        }
+
+        // 4. 更新结算 UI 并弹出
+        document.getElementById('victory-score-val').innerText = this.score;
+        const unlockContainer = document.getElementById('unlock-notifications');
+        const unlockList = document.getElementById('unlock-list');
+        unlockList.innerHTML = '';
+
+        if (unlocksThisRound.length > 0) {
+            unlocksThisRound.forEach(name => {
+                const li = document.createElement('li'); 
+                li.innerText = `- [获得授权] ${name}`; 
+                unlockList.appendChild(li);
+            });
+            unlockContainer.classList.remove('hidden');
+        } else {
+            unlockContainer.classList.add('hidden'); // 如果此关无新解锁，隐藏播报框
+        }
+
+        document.getElementById('victory-screen').classList.remove('hidden');
+        
+        // 5. 核心需求：展示完毕后，立刻清空游戏积分
+        this.score = 0; 
+    }
     gameLoop(currentTime) {
         if (this.state !== 'PLAYING') return;
         const loopStart = performance.now();
@@ -887,7 +1017,9 @@ class Game {
             this.boss.update(this.deltaTime, this.canvas.width, this.canvas.height, this.player, this.playArea);
             
             if (!this.boss.active && this.boss.health <= 0) {
-                this.checkpointScore = this.score;
+                // 【手术三修改：拦截死亡瞬间，触发结算，切断当前帧】
+                this.handleLevelVictory(); 
+                return; 
             }
 
             this.bullets.forEach(b => {

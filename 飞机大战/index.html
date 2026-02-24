@@ -16,29 +16,33 @@
             <p class="subtitle">OS2 指尖长空</p>
         </div>
         
-        <div class="plane-selector">
-            <p style="color:#00d4ff; margin-bottom:5px; font-size: 1.2em;">挂载机型: <span id="selected-plane-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">普通战机</span></p>
-            <p style="color:#00FF44; margin-bottom:10px; font-size: 1.1em;">辅助僚机: <span id="selected-wingman-name" style="font-weight:bold; color:white; text-shadow: 0 0 5px #fff;">无僚机</span></p>
-        </div>
+        <button id="start-btn" class="btn primary" style="margin-top: 60px; font-size: 1.8em; padding: 20px 60px;">连接备战系统</button>
+    </div>
 
-        <div id="admin-debug-panel" class="debug-panel" style="margin-top: 10px; border: 1px solid #00d4ff; padding: 15px; border-radius: 8px; background: rgba(0,212,255,0.05); width: 80%; max-width: 400px;">
-            <p style="font-size:12px; color:#00d4ff; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 主机终端配置 --</p>
-            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;">
-                <button class="plane-btn active" data-type="Ranger">普通战机</button>
-                <button class="plane-btn" data-type="Interceptor">拦截者</button>
-                <button class="plane-btn" data-type="Fortress">重装堡垒</button>
-                <button class="plane-btn" data-type="VoidBomber">虚空轰炸机</button>
+    <div id="hangar-screen" class="screen hidden os2-panel">
+        <h2 style="color: #00d4ff; text-shadow: 0 0 10px #00d4ff; margin-bottom: 30px;">备战机库</h2>
+        <div class="hangar-section">
+            <div class="section-title">主战机体</div>
+            <div id="hangar-planes-container" class="hangar-grid"></div> </div>
+        <div class="hangar-section">
+            <div class="section-title">支援僚机</div>
+            <div id="hangar-wingmen-container" class="hangar-grid"></div> </div>
+        <button id="hangar-launch-btn" class="btn primary" style="margin-top: 20px; width: 80%; max-width: 400px;">确认配置并出击</button>
+    </div>
+
+    <div id="victory-screen" class="modal hidden">
+        <div class="modal-content os2-panel" style="text-align: center; border-color: #00FF44;">
+            <h2 style="color: #00FF44; font-size: 2.5em; margin-bottom: 10px;">作战胜利!</h2>
+            <p style="font-size: 1.5em; color: #fff; margin-bottom: 25px;">本局积分: <span id="victory-score-val" style="color: #ffaa00; font-weight: bold;">0</span></p>
+            <div id="unlock-notifications" class="hidden" style="margin: 20px 0; padding: 15px; background: rgba(0,255,68,0.1); border: 1px solid #00FF44; border-radius: 8px;">
+                <div style="color: #00FF44; font-weight: bold; margin-bottom: 10px;">🎉 获得新许可!</div>
+                <ul id="unlock-list" style="list-style: none; padding: 0; margin: 0; color: #fff; font-size: 1.1em;"></ul>
             </div>
-            
-            <p style="font-size:12px; color:#00FF44; margin-top:15px; margin-bottom:10px; text-align: center; letter-spacing: 2px;">-- 僚机系统挂载 --</p>
-            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;">
-                <button class="wingman-btn active" data-type="none">无僚机</button>
-                <button class="wingman-btn" data-type="defensive">防御型僚机</button>
-                <button class="wingman-btn" data-type="offensive">攻击型僚机</button>
-                <button class="wingman-btn" data-type="magnetic">磁吸型僚机</button>
+            <div style="display: flex; gap: 15px; justify-content: center; margin-top: 30px;">
+                <button id="btn-reconfigure" class="btn primary">重配战机</button>
+                <button id="btn-disconnect" class="btn secondary">断开连接</button>
             </div>
         </div>
-        <button id="start-btn" class="btn primary" style="margin-top: 20px; font-size: 1.5em; padding: 15px 40px;">进入作战系统</button>
     </div>
 
     <div id="mode-select-screen" class="screen hidden os2-panel">
@@ -115,9 +119,9 @@
                 <h3 style="color: #00FF44; margin-top:0; border-bottom: 1px solid #00FF44; padding-bottom: 5px;">当前载入模式</h3>
                 <div id="current-mode-display" class="mode-card active" style="cursor: default;"></div>
                 <button id="view-tutorial-btn" class="btn secondary" style="margin-top: 10px; width: 100%; font-size: 14px;">重新查看操作指南</button>
-                <div class="action-area" style="margin-top: auto; display: flex; flex-direction: column; gap: 10px; width: 100%;">
-                    <button id="launch-level-btn" class="btn primary" style="width: 100%; font-size: 1.2em;">部署出击</button>
-                    <button id="back-to-menu-btn" class="btn secondary" style="width: 100%;">断开连接</button>
+                <div class="action-area" style="margin-top: auto; display: flex; flex-direction: column; gap: 25px; width: 100%;">
+                    <button id="launch-level-btn" class="btn primary" style="width: 100%; font-size: 1.2em; padding: 15px 0;">部署出击</button>
+                    <button id="back-to-menu-btn" class="btn secondary" style="width: 100%; padding: 12px 0;">返回模式选择</button>
                 </div>
             </div>
         </div>
