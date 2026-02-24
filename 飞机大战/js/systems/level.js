@@ -41,10 +41,9 @@ export default class LevelSystem {
         else if (this.state === 'BOSS') {
             if (game.boss && !game.boss.active) {
                 console.log(`✅ BOSS DEFEATED! LEVEL ${this.level} CLEARED.`);
-                game.boss = null;
-                this.level++;
-                this.timer = 0;
-                this.state = 'SPAWNING';
+                // 【Phase 9.2 修改：剥夺越权，将结算权交还主引擎】
+                game.handleLevelVictory(); 
+                return; // 立即中断帧渲染防线，防止后台持续判定
             } else if (game.boss) {
                 if (game.boss.shouldShoot()) {
                     // 标记 Boss 正在射击，以便 game.js 赋予 2.5 倍子弹加速

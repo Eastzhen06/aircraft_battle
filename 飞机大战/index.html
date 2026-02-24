@@ -9,6 +9,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div id="dev-mode-trigger" style="position: absolute; top: 15px; right: 20px; z-index: 9999; cursor: pointer; opacity: 0.3; font-size: 24px; transition: opacity 0.3s;">⚙️</div>
+    <div id="dev-modal" class="modal hidden">
+        <div class="modal-content os2-panel" style="text-align: center; border-color: #ffaa00;">
+            <h2 style="color: #ffaa00; margin-bottom: 15px;">系统覆写协议</h2>
+            <input type="text" id="dev-account" placeholder="管理员账号" autocomplete="off" style="margin: 10px 0; padding: 12px; width: 80%; background: #000; color: #00d4ff; border: 1px solid #00d4ff; text-align: center; font-family: 'Orbitron'; font-size: 1.1em;">
+            <input type="password" id="dev-password" placeholder="授权密钥" autocomplete="off" style="margin: 10px 0; padding: 12px; width: 80%; background: #000; color: #00d4ff; border: 1px solid #00d4ff; text-align: center; font-family: 'Orbitron'; font-size: 1.1em;">
+            <div style="display: flex; gap: 15px; justify-content: center; margin-top: 20px;">
+                <button id="dev-submit" class="btn warning" style="width: 45%;">执行覆写</button>
+                <button id="dev-cancel" class="btn secondary" style="width: 45%;">取消</button>
+            </div>
+        </div>
+    </div>
 
     <div id="start-screen" class="screen os2-panel">
         <div class="title-container">
@@ -35,10 +47,14 @@
             <h2 style="color: #00FF44; font-size: 2.5em; margin-bottom: 10px;">作战胜利!</h2>
             <p style="font-size: 1.5em; color: #fff; margin-bottom: 25px;">本局积分: <span id="victory-score-val" style="color: #ffaa00; font-weight: bold;">0</span></p>
             <div id="unlock-notifications" class="hidden" style="margin: 20px 0; padding: 15px; background: rgba(0,255,68,0.1); border: 1px solid #00FF44; border-radius: 8px;">
-                <div style="color: #00FF44; font-weight: bold; margin-bottom: 10px;">🎉 获得新许可!</div>
+                <div style="color: #00FF44; font-weight: bold; margin-bottom: 10px;">🎉 获得新战机!</div>
                 <ul id="unlock-list" style="list-style: none; padding: 0; margin: 0; color: #fff; font-size: 1.1em;"></ul>
             </div>
+            
+            <div id="victory-peace-msg" class="hidden" style="color: #00d4ff; font-size: 1.2em; margin: 20px 0; text-shadow: 0 0 8px #00d4ff;">恭喜已通过本关</div>
+
             <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 30px;">
+                <button id="btn-victory-next" class="btn hidden" style="width: 90%; margin-bottom: 5px; background: #00FF44; color: #000; box-shadow: 0 0 10px #00FF44;">进入下一关 ⏭️</button>
                 <button id="btn-victory-restart" class="btn warning" style="width: 45%;">重新开始本局</button>
                 <button id="btn-victory-hangar" class="btn primary" style="width: 45%;">返回备战机库</button>
                 <button id="btn-victory-campaign" class="btn secondary" style="width: 45%;">返回关卡选择</button>

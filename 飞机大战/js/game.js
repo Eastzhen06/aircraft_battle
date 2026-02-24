@@ -602,7 +602,56 @@ class Game {
 
         document.getElementById('btn-victory-campaign')?.addEventListener('click', () => {
             hideVictoryScreen();
-            this.showCampaignScreen(); // 关卡选择面板有专门的显示方法
+            // 【Phase 9.2 修改：强行刷新关卡网格状态，解决灰色未解锁的 Bug】
+            this.populateLevelGrid(); 
+            this.showCampaignScreen(); 
+        });
+
+        // 【Phase 9.2 新增：进入下一关】
+        document.getElementById('btn-victory-next')?.addEventListener('click', () => {
+            hideVictoryScreen();
+            this.selectedLevel++;
+            this.startGame(this.selectedLevel);
+        });
+
+        // ==========================================
+        // 【Phase 9.2 新增：最高权限开发者模式鉴权系统】
+        // ==========================================
+        const devTrigger = document.getElementById('dev-mode-trigger');
+        if (devTrigger) {
+            // hover效果
+            devTrigger.addEventListener('mouseenter', () => devTrigger.style.opacity = '1');
+            devTrigger.addEventListener('mouseleave', () => devTrigger.style.opacity = '0.3');
+            
+            devTrigger.addEventListener('click', () => {
+                document.getElementById('dev-modal').classList.remove('hidden');
+                document.getElementById('modal-overlay').classList.remove('hidden');
+            });
+        }
+
+        document.getElementById('dev-cancel')?.addEventListener('click', () => {
+            document.getElementById('dev-modal').classList.add('hidden');
+            document.getElementById('modal-overlay').classList.add('hidden');
+            document.getElementById('dev-account').value = '';
+            document.getElementById('dev-password').value = '';
+        });
+
+        document.getElementById('dev-submit')?.addEventListener('click', () => {
+            const acc = document.getElementById('dev-account').value;
+            const pwd = document.getElementById('dev-password').value;
+            // 严格的常量比对防线
+            if (acc === '0002' && pwd === '1110') {
+                this.unlockedPlanes = Object.keys(this.AIRCRAFT_CONFIG.planes);
+                this.unlockedWingmen = Object.keys(this.AIRCRAFT_CONFIG.wingmen);
+                this.maxClearedLevel = 10;
+                localStorage.setItem('os2_unlocked_planes', JSON.stringify(this.unlockedPlanes));
+                localStorage.setItem('os2_unlocked_wingmen', JSON.stringify(this.unlockedWingmen));
+                localStorage.setItem('os2_max_cleared_level', '10');
+                alert("[OS2_SYS] 鉴权通过。全级图鉴与全关卡物理挂载完毕。");
+                location.reload();
+            } else {
+                alert("[OS2_SYS] 警告：授权凭证无效。");
+            }
         });
 
         document.getElementById('btn-victory-mode')?.addEventListener('click', () => {
@@ -724,10 +773,19 @@ class Game {
         let unlocksThisRound = [];
         const checkUnlock = (type, key, config) => {
             const list = type === 'plane' ? this.unlockedPlanes : this.unlockedWingmen;
-            // 满足解锁等级，且之前没有解锁过
+            
+            // 核心修改 1：如果是当前关卡的专属奖励，必定触发UI播报展示（无视是否用作弊码拿过）
+            if (this.levelSystem.level === config.unlockLevel) {
+                unlocksThisRound.push(config.name);
+            } 
+            // 补发播报：如果跳级打，且之前居然没拿过，补发播报
+            else if (this.levelSystem.level > config.unlockLevel && !list.includes(key)) {
+                unlocksThisRound.push(config.name);
+            }
+
+            // 核心修改 2：物理存入防线。如果没有这架飞机，才存入本地存档，防止数组无限膨胀
             if (this.levelSystem.level >= config.unlockLevel && !list.includes(key)) {
                 list.push(key);
-                unlocksThisRound.push(config.name); // 收集新解锁装备名称用于 UI 播报
             }
         };
 
@@ -757,8 +815,17 @@ class Game {
                 unlockList.appendChild(li);
             });
             unlockContainer.classList.remove('hidden');
+            document.getElementById('victory-peace-msg').classList.add('hidden');
+            document.getElementById('btn-victory-next').classList.add('hidden');
         } else {
-            unlockContainer.classList.add('hidden'); // 如果此关无新解锁，隐藏播报框
+            unlockContainer.classList.add('hidden'); 
+            // 【Phase 9.2 修改：无奖励时显示赞扬文本与下一关按钮】
+            document.getElementById('victory-peace-msg').classList.remove('hidden');
+            if (this.selectedLevel < 10) {
+                document.getElementById('btn-victory-next').classList.remove('hidden');
+            } else {
+                document.getElementById('btn-victory-next').classList.add('hidden'); // 如果是最后一关则不显示
+            }
         }
 
         document.getElementById('victory-screen').classList.remove('hidden');
