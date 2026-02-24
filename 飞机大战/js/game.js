@@ -582,16 +582,36 @@ class Game {
         });
         document.getElementById('menu-btn-pause').addEventListener('click', () => location.reload());
 
-        document.getElementById('btn-reconfigure')?.addEventListener('click', () => {
+        // 【Phase 9.1 修改：绑定胜利面板的 5 大路由按钮】
+        const hideVictoryScreen = () => {
             document.getElementById('victory-screen').classList.add('hidden');
             this.gameContainer.style.display = 'none';
-            document.getElementById('hangar-screen').classList.remove('hidden');
-            this.renderHangar();
             this.state = 'MENU';
+        };
+
+        document.getElementById('btn-victory-restart')?.addEventListener('click', () => {
+            document.getElementById('victory-screen').classList.add('hidden');
+            this.restartCurrentLevel(); // 重开本局不需要退回MENU，直接执行重开
         });
 
-        document.getElementById('btn-disconnect')?.addEventListener('click', () => {
-            location.reload(); // 玩家选择断开连接，直接刷新重载最干净
+        document.getElementById('btn-victory-hangar')?.addEventListener('click', () => {
+            hideVictoryScreen();
+            document.getElementById('hangar-screen').classList.remove('hidden');
+            this.renderHangar();
+        });
+
+        document.getElementById('btn-victory-campaign')?.addEventListener('click', () => {
+            hideVictoryScreen();
+            this.showCampaignScreen(); // 关卡选择面板有专门的显示方法
+        });
+
+        document.getElementById('btn-victory-mode')?.addEventListener('click', () => {
+            hideVictoryScreen();
+            document.getElementById('mode-select-screen').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-victory-disconnect')?.addEventListener('click', () => {
+            location.reload(); // 刷新浏览器，彻底切断所有内存连接
         });
     }
 

@@ -15,11 +15,11 @@ export default class LevelSystem {
             this.spawnTimer += deltaTime;
             
             if (this.timer >= 60) {
-                // 【v4.6 修改】：拦截第 1 关的 Boss 生成，直接平稳过渡
+                // 【Phase 9.1 修改】：第 1 关无 Boss，到达指定时间后直接触发游戏结算防线
                 if (this.level === 1) {
-                    console.log(`✅ LEVEL 1 CLEARED (Peaceful Transition).`);
-                    this.level++;
-                    this.timer = 0;
+                    console.log(`✅ LEVEL 1 CLEARED (No Boss).`);
+                    game.handleLevelVictory(); // 跨文件呼叫主调文件的胜利结算接口
+                    return; // 立即中断 levelSystem 的后续时间轴逻辑
                 } else {
                     this.state = 'TRANSITION';
                     console.log(`⚠️ LEVEL ${this.level} - BOSS APPROACHING!`);
