@@ -229,8 +229,58 @@ canvas#debugCanvas { display: block; width: 100%; height: 100%; pointer-events: 
 }
 .hangar-item.locked .item-status { background: rgba(255, 0, 0, 0.2); color: #ff4444; }
 
+
 /* 关卡锁定样式 */
 .level-box.locked {
     background: rgba(50, 50, 50, 0.5); border-color: #444; color: #666; cursor: not-allowed;
 }
 .level-box.locked:hover { background: rgba(50, 50, 50, 0.5); box-shadow: none; }
+
+/* ==========================================
+   【Phase 9.4 新增】跨平台全响应式布局防线
+   针对手机 / 平板 (宽度 < 800px) 的 UI 降维打击
+   ========================================== */
+@media screen and (max-width: 800px) {
+    /* 缩小巨幅标题 */
+    .game-title { font-size: 2.5em; letter-spacing: 2px; }
+    .subtitle { font-size: 1.2em; }
+    
+    /* 选关面板：强制取消横向死锁，改为垂直自适应流 */
+    .campaign-split-layout { 
+        flex-direction: column; 
+        height: auto; 
+        width: 90%; 
+        padding: 15px; 
+        max-height: 80vh; 
+        overflow-y: auto; 
+    }
+    .split-left { 
+        border-right: none; 
+        border-bottom: 1px solid rgba(0, 212, 255, 0.3); 
+        padding-right: 0; 
+        padding-bottom: 20px; 
+    }
+    
+    /* 关卡网格：适配手机屏幕尺寸 */
+    .level-grid { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .level-box { height: 50px; font-size: 1.2em; }
+    
+    /* 交互模式选择卡片：阻断横向堆叠，改为纵向排列 */
+    #mode-select-screen > div[style*="display: flex"] { 
+        flex-direction: column !important; 
+        align-items: center !important; 
+        gap: 15px !important;
+    }
+    .mode-card { width: 80% !important; min-height: 80px; padding: 10px; }
+    
+    /* 缩放游戏内右上角 HUD 面板，防止遮挡战斗空域 */
+    #hud { 
+        transform: scale(0.7); 
+        transform-origin: top right; 
+        top: 10px; 
+        right: 10px; 
+    }
+    
+    /* 大招充能槽稍微缩小 */
+    #ult-container { width: 200px; }
+}

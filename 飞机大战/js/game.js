@@ -494,8 +494,16 @@ class Game {
     }
 
     updateBoundaries() {
-        const minX = 260; 
-        const maxX = this.canvas.width - 320;
+        let minX, maxX;
+        if (this.canvas.width < 800) {
+            // 【Phase 9.4 修改】：移动端/平板安全区，两边留白 5%
+            minX = this.canvas.width * 0.05;
+            maxX = this.canvas.width * 0.95;
+        } else {
+            // 保持 PC 端原有宽边距
+            minX = 260; 
+            maxX = this.canvas.width - 320;
+        }
         this.playArea = { minX, maxX };
         this.interactiveWidth = maxX - minX;
     }
@@ -695,6 +703,10 @@ class Game {
         this.canvas.height = window.innerHeight;
         if (this.gestureEngine) this.gestureEngine.gameCanvas = this.canvas;
         this.updateBoundaries();
+        
+        // 【Phase 9.4 核心修改】：强制同步热更新实例的边界尺寸，防止强行拉伸变形后按键/识别坐标脱节
+        if (this.player) this.player.interactiveWidth = this.interactiveWidth;
+        if (this.wingman) this.wingman.interactiveWidth = this.interactiveWidth;
     }
 
     startGame(startLevel = 1) {
