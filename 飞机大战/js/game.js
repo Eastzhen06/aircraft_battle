@@ -510,6 +510,20 @@ class Game {
             this.startScreen.style.display = 'none';
             document.getElementById('hangar-screen').classList.remove('hidden');
             this.renderHangar(); // 渲染机库图片和状态
+
+            // 【Phase 9.3 核心修改：拦截判定，呼出首次欢迎大屏】
+            if (!localStorage.getItem('os2_has_seen_welcome_v5')) {
+                document.getElementById('welcome-modal').classList.remove('hidden');
+                document.getElementById('modal-overlay').classList.remove('hidden');
+            }
+        });
+
+        // 【Phase 9.3 新增：收到简报，销毁大屏并写入硬盘】
+        document.getElementById('btn-close-welcome')?.addEventListener('click', () => {
+            document.getElementById('welcome-modal').classList.add('hidden');
+            document.getElementById('modal-overlay').classList.add('hidden');
+            // 写入已读标识，之后无论是刷新还是重进，该大屏都不会再骚扰玩家
+            localStorage.setItem('os2_has_seen_welcome_v5', 'true');
         });
 
         // 新增：从机库进入模式选择

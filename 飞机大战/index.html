@@ -84,6 +84,47 @@
 
     <div id="modal-overlay" class="hidden"></div>
 
+    <div id="welcome-modal" class="modal hidden" style="width: 80%; max-width: 800px; max-height: 85vh;">
+        <div class="modal-content os2-panel" style="overflow-y: auto; max-height: 80vh;">
+            <h2 style="color: #00d4ff; font-size: 2.2em; text-align: center; text-shadow: 0 0 10px #00d4ff;">🌌 OS2 作战总署简报 🌌</h2>
+            <p style="color: #ffaa00; text-align: center; font-size: 1.2em; margin-bottom: 20px;">首次接入系统，请指挥官仔细阅读最高机密：</p>
+            
+            <h3 style="color: #00FF44; border-left: 4px solid #00FF44; padding-left: 10px;">🕹️ 【三大控制核心，随心切换】</h3>
+            <ul style="line-height: 1.8; margin-bottom: 20px; color: #ddd;">
+                <li><strong>全键盘模式</strong>：经典街机体验，精准硬核。</li>
+                <li><strong>鼠标/触控模式</strong>：指哪打哪，丝滑走位。</li>
+                <li><strong style="color: #00d4ff;">手势交互模式 (推荐)</strong>：面向摄像头摆出特定手势即可驾驶战机！<br>
+                <span style="font-size: 0.9em; color: #ffaa00;">(机密提示：在手势模式下，如果系统检测到你正遭受高危攻击，底层 AI 可能会自动为你开启保护罩或释放大招！)</span></li>
+            </ul>
+
+            <h3 style="color: #00d4ff; border-left: 4px solid #00d4ff; padding-left: 10px;">✈️ 【主力机型与军备档案】</h3>
+            <ul style="line-height: 1.8; margin-bottom: 20px; color: #ddd;">
+                <li><strong>普通战机</strong>：系统初始挂载，各项属性均衡稳定。</li>
+                <li><strong>拦截者</strong>：极速连发，广角扇形弹幕，群怪清道夫。</li>
+                <li><strong>重装堡垒</strong>：发射毁灭级穿透激光，重创精英单位护甲。</li>
+                <li><strong>虚空轰炸机</strong>：发射高爆弹头，造成大范围 AOE 爆破伤害。</li>
+                <li style="color: #aaa; font-size: 0.95em;">* 另配有「攻击」、「防御」、「磁吸」三型支援僚机，提供战术协助。</li>
+            </ul>
+
+            <h3 style="color: #ff4444; border-left: 4px solid #ff4444; padding-left: 10px;">🍉 【高能预警：护盾版“切西瓜”玩法】</h3>
+            <ul style="line-height: 1.8; margin-bottom: 20px; color: #ddd;">
+                <li>当你开启<strong>保护罩</strong>后，你将化身无敌的星际战神！</li>
+                <li>此时直接<strong>冲撞</strong>任何普通敌机与精英怪（除 Boss 外），均可瞬间将其消除，且<strong>自身绝不掉血</strong>！</li>
+                <li style="color: #00FF44; font-weight: bold;">💡 强烈建议使用「触控模式」或「手势模式」体验这种在敌阵中“切西瓜”般的极致爽感！</li>
+            </ul>
+
+            <h3 style="color: #ffaa00; border-left: 4px solid #ffaa00; padding-left: 10px;">🗺️ 【战役序列与战地操作指南】</h3>
+            <div style="line-height: 1.8; color: #ddd; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,170,0,0.3);">
+                <strong>系统操作闭环：</strong><br>
+                1. <strong>机库备战</strong>：在【备战机库】查阅已授权的战机，点击卡片切换为绿色的“已部署”状态。<br>
+                2. <strong>循序渐进</strong>：星图包含 10 大防区。必须击溃当前守关 Boss，方可解锁下一片星域。<br>
+                3. <strong>获取许可</strong>：在特定战役取得胜利后，结算界面将向你签发全新战机或僚机的授权。<br>
+                4. <strong>迭代升级</strong>：带着新授权退回机库换装，向更深处的宇宙进军！
+            </div>
+            
+            <button id="btn-close-welcome" class="btn primary" style="width: 100%; margin-top: 25px; font-size: 1.5em; padding: 15px; box-shadow: 0 0 15px rgba(0,212,255,0.4);">收到，立刻部署</button>
+        </div>
+    </div>
     <div id="modal-gesture" class="modal hidden">
         <div class="modal-content">
             <h2 style="color: #00d4ff; margin-bottom: 15px;">👋 手势作战指南</h2>
