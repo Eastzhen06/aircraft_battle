@@ -52,17 +52,38 @@ export default class GestureEngine {
         }
     }
 
-    startWebcam() {
+        startWebcam() {
         navigator.mediaDevices.getUserMedia({ 
-            video: { width: 640, height: 480, frameRate: { ideal: 60 } }, 
+            // 【Phase 9.5 核心补丁】：
+            // 1. 改绝对宽高为 ideal 协商，防止手机竖屏产生 OverconstrainedError
+            // 2. 强制要求 facingMode: 'user' (前置摄像头)
+            video: { 
+                width: { ideal: 640 }, 
+                height: { ideal: 480 }, 
+                frameRate: { ideal: 60 },
+                facingMode: 'user'
+            }, 
             audio: false 
         })
         .then((stream) => {
             this.video.srcObject = stream;
-            this.video.play();
+            
+            // 终极防线加固，确保所有属性在 play() 前就绪
+            this.video.muted = true;
+            this.video.playsInline = true;
+            
+            // 【Phase 9.5 核心补丁】：接管异步播放的生命周期，防止 DOMException 静默崩溃
+            const playPromise = this.video.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.error("🚫 移动端视频流播放被操作系统拦截，请检查浏览器权限:", error);
+                });
+            }
+            
             this.webcamRunning = true;
             
             if ('requestVideoFrameCallback' in this.video) {
+
                 this.video.requestVideoFrameCallback(this.onNewFrame.bind(this));
             } else {
                 this.video.addEventListener("loadeddata", () => this.detectLoop());

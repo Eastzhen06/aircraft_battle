@@ -737,10 +737,16 @@ class Game {
             const video = document.createElement('video');
             video.setAttribute('playsinline', '');
             video.setAttribute('webkit-playsinline', '');
+            
+            // 【Phase 9.5 核心补丁】：移动端 WebKit 强制要求静音与自动播放声明，否则物理挂起导致黑屏
+            video.autoplay = true;
+            video.muted = true;
+            
             video.style.display = 'none';
             document.body.appendChild(video);
             this.gestureEngine.init(video, document.getElementById('debugCanvas'), this.canvas);
         } else {
+
             // 【v4.8 修改】：如果在非手势模式下，强制切断手势引擎的一切可能调用，确保摄像头处于死亡状态
             document.getElementById('gesture-display').textContent = `动作: 键盘/物理 锁定`;
             this.unifiedInput.x = this.canvas.width / 2;
