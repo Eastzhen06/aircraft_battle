@@ -14,13 +14,24 @@ let handLandmarker = null;
 let lastProcessedTime = -1; 
 
 import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3").then(async (vision) => {
-    try {
+        try {
         const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+        
+        // 【Phase 9.6 核心修改】：移动端环境嗅探与 GPU 智能降级防线
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const hardwareDelegate = isMobile ? "CPU" : "GPU";
+        console.log(`[Worker] 宿主环境分析: ${isMobile ? '移动端/平板' : 'PC端'}, 视觉引擎分配策略: ${hardwareDelegate}`);
+
         handLandmarker = await vision.HandLandmarker.createFromOptions(resolver, {
-            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", delegate: "GPU" },
+            baseOptions: { 
+                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", 
+                // 动态分配算力，绕过移动端 WebGL 内存死锁
+                delegate: hardwareDelegate 
+            },
             runningMode: "VIDEO", numHands: 1
         });
         console.log("[Worker] 视觉引擎加载完毕，系统上线。");
+
         self.postMessage({ type: 'INIT_DONE' }); 
     } catch (error) { console.error("[Worker] 视觉引擎加载失败:", error); }
 }).catch(err => console.error("[Worker] 模块请求失败:", err));
