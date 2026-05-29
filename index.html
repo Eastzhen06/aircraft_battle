@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>飞机大战 - OS2 指尖长空 </title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- Supabase 连接 -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+</head>
+<body>
+
+
+    <div id="dev-mode-trigger" style="position: absolute; top: 15px; right: 20px; z-index: 9999; cursor: pointer; opacity: 0.3; font-size: 24px; transition: opacity 0.3s;">⚙️</div>
+    <div id="user-btn" style="position: absolute; top: 15px; right: 60px; z-index: 9999; cursor: pointer; opacity: 0.8; font-size: 14px; transition: opacity 0.3s; font-family: 'Orbitron', sans-serif; color: #00d4ff; background: rgba(0, 212, 255, 0.1); border: 1px solid #00d4ff; border-radius: 4px; padding: 4px 12px; display: none;">👤 <span id="user-btn-name"></span></div>
+    <div id="dev-modal" class="modal hidden">
+        <div class="modal-content os2-panel" style="text-align: center; border-color: #ffaa00;">
+            <h2 style="color: #ffaa00; margin-bottom: 15px;">系统覆写协议</h2>
+            <input type="text" id="dev-account" placeholder="管理员账号" autocomplete="off" style="margin: 10px 0; padding: 12px; width: 80%; background: #000; color: #00d4ff; border: 1px solid #00d4ff; text-align: center; font-family: 'Orbitron'; font-size: 1.1em;">
+            <input type="password" id="dev-password" placeholder="授权密钥" autocomplete="off" style="margin: 10px 0; padding: 12px; width: 80%; background: #000; color: #00d4ff; border: 1px solid #00d4ff; text-align: center; font-family: 'Orbitron'; font-size: 1.1em;">
+            <div style="display: flex; gap: 15px; justify-content: center; margin-top: 20px;">
+                <button id="dev-submit" class="btn warning" style="width: 45%;">执行覆写</button>
+                <button id="dev-cancel" class="btn secondary" style="width: 45%;">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="change-pwd-modal" class="modal hidden">
+        <div class="modal-content os2-panel" style="text-align: center;">
+            <h2 style="color: #00d4ff; margin-bottom: 15px; text-shadow: 0 0 8px #00d4ff;">修改密码</h2>
+            <input type="text" id="cpwd-username" placeholder="用户名" readonly autocomplete="off" style="margin: 10px 0; padding: 12px; width: 80%; background: rgba(0,0,0,0.4); color: #888; border: 1px solid #555; text-align: center; font-family: 'Orbitron'; font-size: 1.1em; cursor: not-allowed;">
+            <input type="password" id="cpwd-old" placeholder="当前密码" autocomplete="off" style="margin: 10px 0; padding: 12px; width: 80%; background: #000; color: #00d4ff; border: 1px solid #00d4ff; text-align: center; font-family: 'Orbitron'; font-size: 1.1em;">
+            <input type="password" id="cpwd-new" placeholder="新密码（至少6位）" autocomplete="off" style="margin: 10px 0; padding: 12px; width: 80%; background: #000; color: #00d4ff; border: 1px solid #00d4ff; text-align: center; font-family: 'Orbitron'; font-size: 1.1em;">
+            <div id="cpwd-error" style="color: #ff4444; font-size: 0.85em; text-align: center; min-height: 1.2em; margin-top: 5px;"></div>
+            <div style="display: flex; gap: 15px; justify-content: center; margin-top: 20px;">
+                <button id="cpwd-submit" class="btn" style="width: 45%; border-color: #00FF44; color: #00FF44;">确认修改</button>
+                <button id="cpwd-cancel" class="btn secondary" style="width: 45%;">取消</button>
+            </div>
+            <button id="cpwd-logout" class="btn" style="width: 90%; margin-top: 10px; border-color: #ff4444; color: #ff4444;">退出登录</button>
+        </div>
+    </div>
+
+    <div id="data-view-modal" class="modal hidden">
+        <div class="modal-content os2-panel" style="text-align: center; max-width: 550px;">
+            <h2 style="color: #00d4ff; margin-bottom: 20px; text-shadow: 0 0 8px #00d4ff;">作战数据总览</h2>
+            <div id="data-view-content" style="text-align: left; line-height: 2;"></div>
+            <button id="data-view-close" class="btn" style="margin-top: 20px; width: 60%;">关闭</button>
+        </div>
+    </div>
+
+    <!-- 登录/注册界面 -->
+    <div id="auth-screen" class="screen os2-panel">
+        <div class="title-container">
+            <h1 class="game-title">飞机大战</h1>
+            <p class="subtitle">OS2 指尖长空</p>
+        </div>
+        <div style="margin-top: 30px; width: 320px; display: flex; flex-direction: column; gap: 15px;">
+            <input id="auth-username" type="text" placeholder="用户名" autocomplete="off"
+                   style="padding: 14px; background: rgba(0,0,0,0.6); border: 1px solid #00d4ff; border-radius: 4px; color: #00d4ff; font-family: 'Orbitron'; font-size: 1em; text-align: center; outline: none;">
+            <input id="auth-password" type="password" placeholder="密码" autocomplete="off"
+                   style="padding: 14px; background: rgba(0,0,0,0.6); border: 1px solid #00d4ff; border-radius: 4px; color: #00d4ff; font-family: 'Orbitron'; font-size: 1em; text-align: center; outline: none;">
+            <div id="auth-error" style="color: #ff4444; font-size: 0.85em; text-align: center; min-height: 1.2em;"></div>
+            <button id="auth-login-btn" class="btn primary" style="width: 100%; font-size: 1.1em;">登 录</button>
+            <button id="auth-register-btn" class="btn" style="width: 100%; font-size: 1.1em; border-color: #00FF44; color: #00FF44;">注册新账号</button>
+            <button id="auth-guest-btn" class="btn" style="width: 100%; font-size: 0.9em; border-color: #888; color: #888;">游客模式（不登录直接玩）</button>
+        </div>
+    </div>
+
+    <div id="start-screen" class="screen os2-panel">
+        <div class="title-container">
+            <h1 class="game-title">飞机大战</h1>
+            <p class="subtitle">OS2 指尖长空</p>
+        </div>
+        
+        <button id="start-btn" class="btn primary" style="margin-top: 60px; font-size: 1.8em; padding: 20px 60px;">连接备战系统</button>
+        <button id="view-data-btn" class="btn secondary" style="margin-top: 15px; font-size: 1em;">作战数据总览</button>
+    </div>
+
+    <div id="hangar-screen" class="screen hidden os2-panel">
+        <h2 style="color: #00d4ff; text-shadow: 0 0 10px #00d4ff; margin-bottom: 30px;">备战机库</h2>
+        <div class="hangar-section">
+            <div class="section-title">主战机体</div>
+            <div id="hangar-planes-container" class="hangar-grid"></div> </div>
+        <div class="hangar-section">
+            <div class="section-title">支援僚机</div>
+            <div id="hangar-wingmen-container" class="hangar-grid"></div> </div>
+        <button id="hangar-launch-btn" class="btn primary" style="margin-top: 20px; width: 80%; max-width: 400px;">确认配置并出击</button>
+    </div>
+
+    <div id="victory-screen" class="modal hidden">
+        <div class="modal-content os2-panel" style="text-align: center; border-color: #00FF44;">
+            <h2 style="color: #00FF44; font-size: 2.5em; margin-bottom: 10px;">作战胜利!</h2>
+            <p style="font-size: 1.5em; color: #fff; margin-bottom: 25px;">本局积分: <span id="victory-score-val" style="color: #ffaa00; font-weight: bold;">0</span></p>
+            <div id="unlock-notifications" class="hidden" style="margin: 20px 0; padding: 15px; background: rgba(0,255,68,0.1); border: 1px solid #00FF44; border-radius: 8px;">
+                <div style="color: #00FF44; font-weight: bold; margin-bottom: 10px;">🎉 获得新战机!</div>
+                <ul id="unlock-list" style="list-style: none; padding: 0; margin: 0; color: #fff; font-size: 1.1em;"></ul>
+            </div>
+            
+            <div id="victory-peace-msg" class="hidden" style="color: #00d4ff; font-size: 1.2em; margin: 20px 0; text-shadow: 0 0 8px #00d4ff;">恭喜已通过本关</div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 30px;">
+                <button id="btn-victory-next" class="btn hidden" style="width: 90%; margin-bottom: 5px; background: #00FF44; color: #000; box-shadow: 0 0 10px #00FF44;">进入下一关 ⏭️</button>
+                <button id="btn-victory-restart" class="btn warning" style="width: 45%;">重新开始本局</button>
+                <button id="btn-victory-hangar" class="btn primary" style="width: 45%;">返回备战机库</button>
+                <button id="btn-victory-campaign" class="btn secondary" style="width: 45%;">返回关卡选择</button>
+                <button id="btn-victory-mode" class="btn secondary" style="width: 45%;">返回交互模式选择</button>
+                <button id="btn-victory-disconnect" class="btn secondary" style="width: 90%; margin-top: 5px; border-color: #ff4444; color: #ff4444;">断开连接</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mode-select-screen" class="screen hidden os2-panel">
+        <h2 style="color: #00d4ff; margin-bottom: 30px; font-size: 2.2em; text-shadow: 0 0 10px #00d4ff;">请选择战机控制模式</h2>
+        <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 40px; align-items: stretch;">
+            <div class="mode-card" data-mode="keyboard" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="mode-text-flat">全键盘操作</div>
+            </div>
+            <div class="mode-card" data-mode="touch" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="mode-text-flat">鼠标/触屏滑动</div>
+            </div>
+            <div class="mode-card" data-mode="gesture" style="width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                <div class="mode-text-heavy">手势控制</div>
+                <div class="mode-text-light">沉浸式视觉交互</div>
+                <div class="mode-text-light" style="color: #ffaa00; font-weight: bold; margin-top: 5px;">(Beta)</div>
+            </div>
+        </div>
+        <button id="back-from-mode-btn" class="btn secondary" style="width: 200px; padding: 10px;">返回主菜单</button>
+    </div>
+
+    <div id="modal-overlay" class="hidden"></div>
+
+    <div id="welcome-modal" class="modal hidden" style="width: 80%; max-width: 800px; max-height: 85vh;">
+        <div class="modal-content os2-panel" style="overflow-y: auto; max-height: 80vh;">
+            <h2 style="color: #00d4ff; font-size: 2.2em; text-align: center; text-shadow: 0 0 10px #00d4ff;">🌌 OS2 作战总署简报 🌌</h2>
+            <p style="color: #ffaa00; text-align: center; font-size: 1.2em; margin-bottom: 20px;">首次接入系统，请指挥官仔细阅读最高机密：</p>
+            
+            <h3 style="color: #00FF44; border-left: 4px solid #00FF44; padding-left: 10px;">🕹️ 【三大控制核心，随心切换】</h3>
+            <ul style="line-height: 1.8; margin-bottom: 20px; color: #ddd;">
+                <li><strong>全键盘模式</strong>：经典街机体验，精准硬核。</li>
+                <li><strong>鼠标/触控模式</strong>：指哪打哪，丝滑走位。</li>
+                <li><strong style="color: #00d4ff;">手势交互模式 (推荐)</strong>：面向摄像头摆出特定手势即可驾驶战机！<br>
+                <span style="font-size: 0.9em; color: #ffaa00;">(机密提示：在手势模式下，如果系统检测到你正遭受高危攻击，底层 AI 可能会自动为你开启保护罩或释放大招！)</span></li>
+            </ul>
+
+            <h3 style="color: #00d4ff; border-left: 4px solid #00d4ff; padding-left: 10px;">✈️ 【主力机型与军备档案】</h3>
+            <ul style="line-height: 1.8; margin-bottom: 20px; color: #ddd;">
+                <li><strong>普通战机</strong>：系统初始挂载，各项属性均衡稳定。</li>
+                <li><strong>拦截者</strong>：极速连发，广角扇形弹幕，群怪清道夫。</li>
+                <li><strong>重装堡垒</strong>：发射毁灭级穿透激光，重创精英单位护甲。</li>
+                <li><strong>虚空轰炸机</strong>：发射高爆弹头，造成大范围 AOE 爆破伤害。</li>
+                <li style="color: #aaa; font-size: 0.95em;">* 另配有「攻击」、「防御」、「磁吸」三型支援僚机，提供战术协助。</li>
+            </ul>
+
+            <h3 style="color: #ff4444; border-left: 4px solid #ff4444; padding-left: 10px;">🍉 【高能预警：护盾版“切西瓜”玩法】</h3>
+            <ul style="line-height: 1.8; margin-bottom: 20px; color: #ddd;">
+                <li>当你开启<strong>保护罩</strong>后，你将化身无敌的星际战神！</li>
+                <li>此时直接<strong>冲撞</strong>任何普通敌机与精英怪（除 Boss 外），均可瞬间将其消除，且<strong>自身绝不掉血</strong>！</li>
+                <li style="color: #00FF44; font-weight: bold;">💡 强烈建议使用「触控模式」或「手势模式」体验这种在敌阵中“切西瓜”般的极致爽感！</li>
+            </ul>
+
+            <h3 style="color: #ffaa00; border-left: 4px solid #ffaa00; padding-left: 10px;">🗺️ 【战役序列与战地操作指南】</h3>
+            <div style="line-height: 1.8; color: #ddd; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,170,0,0.3);">
+                <strong>系统操作闭环：</strong><br>
+                1. <strong>机库备战</strong>：在【备战机库】查阅已授权的战机，点击卡片切换为绿色的“已部署”状态。<br>
+                2. <strong>循序渐进</strong>：星图包含 10 大防区。必须击溃当前守关 Boss，方可解锁下一片星域。<br>
+                3. <strong>获取许可</strong>：在特定战役取得胜利后，结算界面将向你签发全新战机或僚机的授权。<br>
+                4. <strong>迭代升级</strong>：带着新授权退回机库换装，向更深处的宇宙进军！
+            </div>
+            
+            <button id="btn-close-welcome" class="btn primary" style="width: 100%; margin-top: 25px; font-size: 1.5em; padding: 15px; box-shadow: 0 0 15px rgba(0,212,255,0.4);">收到，立刻部署</button>
+        </div>
+    </div>
+    <div id="modal-gesture" class="modal hidden">
+        <div class="modal-content">
+            <h2 style="color: #00d4ff; margin-bottom: 15px;">👋 手势作战指南</h2>
+            <div class="tutorial-text">
+                <p>👉 <strong>自动射击：</strong> 保持【手枪】姿势，系统将锁定开火。</p>
+                <p>✊ <strong>保护罩：</strong> 握一下【拳头】，立刻展开高能偏导护盾。</p>
+                <p>💥 <strong>释放大招：</strong> 模拟手枪【后坐力】（食指快速上抬），释放毁灭打击！</p>
+                <p>使用此模式： 💡<strong>iOS系统：</strong>建议使用微信直接打开链接。 🍉win/mac:电脑无限制 
+                                 🗺️<strong>安卓系统：</strong>推荐使用edge浏览器打开链接，若直接使用微信打开，可能会出现图案bug。</p>
+            </div>
+            <p class="tutorial-tip">
+                小贴士：想让护盾和大招识别更准确？记得把手放在画面框内，手势识别会更灵敏准确哦！
+                <br><strong>另外，握拳以后需要立刻切换回手枪姿势，以便战机继续射击！</strong>
+            </p>
+            <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button> 
+        </div>
+    </div>
+
+    <div id="modal-keyboard" class="modal hidden">
+        <div class="modal-content">
+            <h2 style="color: #00FF44; margin-bottom: 15px;">⌨️ 键盘先锋指南 (已更新)</h2>
+            <div class="tutorial-section">
+                <p><strong>方向键 (↑↓←→)：</strong> 控制战机上下左右移动</p>
+                <p><strong>Space键 (空格)：</strong> 持续射击</p>
+                <p><strong>G 键：</strong> 开启保护罩 (Guard)</p>
+                <p><strong>F 键：</strong> 释放大招 (Fire)</p>
+            </div>
+            <p class="tutorial-tip">小贴士：大招现在只需单独按下 F 键即可释放，无需组合键！</p>
+            <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
+        </div>
+    </div>
+
+    <div id="modal-touch" class="modal hidden">
+        <div class="modal-content">
+            <h2 style="color: #00FF44; margin-bottom: 15px;">📱 触控/鼠标达人</h2>
+            <div class="tutorial-section">
+                <p><strong>单指/光标滑动：</strong> 丝滑走位并自动射击</p>
+                <p><strong>快速双击：</strong> 开启保护罩</p>
+                <p><strong>快速三击：</strong> 释放大招</p>
+            </div>
+            <p class="tutorial-tip">小贴士：双击和三击需要快速连续点击屏幕同一位置才能精准触发哦！</p>
+            <button class="btn primary close-modal-btn" style="width: 100%; margin-top: 15px;">收到</button>
+        </div>
+    </div>
+
+    <div id="campaign-screen" class="screen hidden os2-panel">
+        <div class="campaign-split-layout">
+            <div class="split-left">
+                <h2 class="split-title">选择开始关卡</h2>
+                <p class="split-subtitle">请点击关卡序号--决定<span class="highlight-text">无尽模式</span>开始关卡</p>
+                <div id="level-grid" class="level-grid"></div>
+            </div>
+            <div class="split-right">
+                <h3 style="color: #00FF44; margin-top:0; border-bottom: 1px solid #00FF44; padding-bottom: 5px;">当前载入模式</h3>
+                <div id="current-mode-display" class="mode-card active" style="cursor: default;"></div>
+                <button id="view-tutorial-btn" class="btn secondary" style="margin-top: 10px; width: 100%; font-size: 14px;">重新查看操作指南</button>
+                <div class="action-area" style="margin-top: auto; display: flex; flex-direction: column; gap: 25px; width: 100%;">
+                    <button id="launch-level-btn" class="btn primary" style="width: 100%; font-size: 1.2em; padding: 15px 0;">部署出击</button>
+                    <button id="back-to-menu-btn" class="btn secondary" style="width: 100%; padding: 12px 0;">返回模式选择</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-container" style="display: none;">
+        <canvas id="gameCanvas"></canvas>
+        <div id="debug-wrapper" class="debug-wrapper os2-panel">
+            <canvas id="debugCanvas"></canvas>
+            <div id="debug-info" class="debug-info"><span id="fps-display">FPS: 0</span> | <span id="gesture-display">动作: IDLE</span></div>
+            <button id="debug-toggle-btn" class="toggle-tab">◀</button>
+        </div>
+        <button id="pause-btn" class="btn icon-btn" style="position: absolute; top: 15px; left: 15px; z-index: 1000; padding: 10px;">⏸️</button>
+
+        <div id="pause-screen" class="screen hidden os2-panel">
+            <h2 style="color: #00d4ff; text-shadow: 0 0 20px #00d4ff; font-size: 3em;">系统已挂起</h2>
+            <div class="pause-menu" style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
+                <button id="resume-btn" class="btn primary">继续游戏</button>
+                <button id="restart-btn-pause" class="btn warning">重新开始此局</button>
+                <button id="menu-btn-pause" class="btn secondary">强制断开连接</button>
+            </div>
+        </div>
+
+        <div id="hud" class="hidden">
+            <div class="hud-left">
+                <div class="hud-item"><span class="hud-label">关卡</span><span id="level-display" class="hud-value" style="color: #ffaa00;">1</span></div>
+                <div class="hud-item"><span class="hud-label">积分</span><span id="score">0</span></div>
+            </div>
+            <div class="hud-right">
+                <div class="hud-item" style="justify-content: flex-end;"><span id="lives-count" class="hud-value" style="color: #ff4444; font-size: 24px;">❤️ x 3</span></div>
+                <div class="hud-item"><span class="hud-label">生命值</span><div id="health-bar" class="health-bar"><div id="health-fill" class="health-fill"></div></div></div>
+                <div class="hud-item"><div id="shield-icon-container"><span class="hud-label">保护罩</span><span id="shield-count" class="hud-value" style="color: #00d4ff;">🛡️ x 3</span></div></div>
+                
+                <div class="audio-panel">
+                    <div class="audio-row">
+                        <span class="audio-label">音效</span>
+                        <input type="checkbox" id="toggle-sfx" class="toggle-switch" checked>
+                    </div>
+                    <div class="audio-row">
+                        <span class="audio-label">音乐</span>
+                        <input type="checkbox" id="toggle-bgm" class="toggle-switch" checked>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="ult-wrapper" class="hidden">
+            <div id="ult-charges">0</div>
+            <div id="ult-container">
+                <div id="ult-fill"></div>
+                <span id="ult-text">0%</span>
+            </div>
+        </div>
+
+    </div>
+    <script src="js/auth.js"></script>
+    <script type="module" src="js/game.js"></script>
+</body>
+</html>
